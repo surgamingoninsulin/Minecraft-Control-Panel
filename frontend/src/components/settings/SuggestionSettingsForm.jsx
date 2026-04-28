@@ -1,32 +1,30 @@
 import { useState } from 'react';
 import * as settingsApi from '../../services/settingsApi';
 
-const EXAMPLE = `Message above the JSON is allowed.
-
-\`\`\`json
-{
-  "plugins": [
-    {
-      "id": "example-plugin",
-      "name": "Example Plugin",
-      "author": "Example Author",
-      "minecraftVersion": "1.21.11",
-      "version": "1.0.0",
-      "image": "https://example.com/logo.png",
-      "directDownloadUrl": "https://example.com/plugin.jar",
-      "description": "Example description",
-      "websiteUrl": "https://example.com",
-      "dependencies": []
-    }
-  ]
+function buildTemplate(category) {
+  const entryId = category === 'mods' ? 'example-mod' : (category === 'datapacks' ? 'example-datapack' : 'example-plugin');
+  const entryName = category === 'mods' ? 'Example Mod' : (category === 'datapacks' ? 'Example Datapack' : 'Example Plugin');
+  return JSON.stringify({
+    [category]: [
+      {
+        id: entryId,
+        name: entryName,
+        author: 'Example Author',
+        minecraftVersion: '1.21.11',
+        version: '1.0.0',
+        image: 'https://example.com/logo.png',
+        directDownloadUrl: 'https://example.com/download.jar',
+        description: 'Example description',
+        websiteUrl: 'https://example.com',
+        dependencies: []
+      }
+    ]
+  }, null, 2);
 }
-\`\`\`
-
-Text below is also allowed.`;
 
 function SuggestionSettingsForm() {
   const [category, setCategory] = useState('plugins');
-  const [content, setContent] = useState(EXAMPLE);
+  const [content, setContent] = useState(buildTemplate('plugins'));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
@@ -50,13 +48,21 @@ function SuggestionSettingsForm() {
     <div className="settings-card">
       <h3>Gist Suggestions</h3>
       <p style={{ marginTop: 4, color: 'var(--text-secondary)' }}>
-        Submit a suggestion as a GitHub issue. Only JSON inside the <code>```json</code> block is parsed.
+        Submit JSON only. Text above/below is not allowed.
       </p>
 
       <form onSubmit={onSubmit} style={{ marginTop: 12 }}>
         <div className="form-group">
           <label>Category</label>
-          <select className="input-field" value={category} onChange={(e) => setCategory(e.target.value)}>
+          <select
+            className="input-field"
+            value={category}
+            onChange={(e) => {
+              const next = e.target.value;
+              setCategory(next);
+              setContent(buildTemplate(next));
+            }}
+          >
             <option value="plugins">Plugins</option>
             <option value="datapacks">Datapacks</option>
             <option value="mods">Mods</option>
@@ -64,7 +70,7 @@ function SuggestionSettingsForm() {
         </div>
 
         <div className="form-group">
-          <label>Suggestion Message + JSON Block</label>
+          <label>Suggestion JSON</label>
           <textarea
             className="input-field"
             rows={16}

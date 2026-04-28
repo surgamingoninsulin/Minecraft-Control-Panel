@@ -4,15 +4,6 @@ const DEFAULT_GIST_URL = 'https://gist.github.com/surgamingoninsulin/2b4d90991a5
 const DEFAULT_REPO = 'surgamingoninsulin/minecraft-panel';
 const ALLOWED_TOP_LEVEL_KEYS = new Set(['plugins', 'datapacks', 'mods']);
 
-function extractJsonCodeBlock(input) {
-  const text = String(input || '');
-  const jsonFence = text.match(/```json\s*([\s\S]*?)```/i);
-  if (jsonFence?.[1]) return jsonFence[1].trim();
-  const anyFence = text.match(/```\s*([\s\S]*?)```/i);
-  if (anyFence?.[1]) return anyFence[1].trim();
-  return '';
-}
-
 function normalizeCategory(value) {
   const raw = String(value || '').trim().toLowerCase();
   if (raw === 'plugin' || raw === 'plugins') return 'plugins';
@@ -66,8 +57,7 @@ class SuggestionService {
     return { owner: parts[0], repo: parts[1], repoRef };
   }
 
-  buildIssueBody({ message = '', jsonBlock = '', normalizedPayload = {}, requestedBy = 'unknown' } = {}) {
-    const compactMessage = String(message || '').trim();
+  buildIssueBody({ normalizedPayload = {}, requestedBy = 'unknown' } = {}) {
     const payloadText = JSON.stringify(normalizedPayload, null, 2);
     return [
       `New gist suggestion submitted from the Minecraft Panel settings.`,
@@ -75,16 +65,9 @@ class SuggestionService {
       `Requested by: ${requestedBy}`,
       `Target gist: ${DEFAULT_GIST_URL}`,
       ``,
-      compactMessage ? `User message (outside JSON block):\n${compactMessage}` : 'User message (outside JSON block): (none)',
-      ``,
-      `Parsed JSON block:`,
+      `Suggestion payload:`,
       '```json',
       payloadText,
-      '```',
-      ``,
-      `Raw JSON block received:`,
-      '```json',
-      jsonBlock,
       '```'
     ].join('\n');
   }
@@ -96,16 +79,13 @@ class SuggestionService {
     }
 
     const categoryHint = normalizeCategory(category);
-    const jsonBlock = extractJsonCodeBlock(rawText);
-    if (!jsonBlock) {
-      throw new Error('No JSON code block found. Include the suggestion inside ```json ... ```');
-    }
-
+    const jsonText = String(rawText || '').trim();
+    if (!jsonText) throw new Error('Suggestion JSON is required');
     let parsed;
     try {
-      parsed = JSON.parse(jsonBlock);
+      parsed = JSON.parse(jsonText);
     } catch (err) {
-      throw new Error(`Invalid JSON block: ${err.message}`);
+      throw new Error(`Invalid JSON payload: ${err.message}`);
     }
 
     const normalizedPayload = normalizeParsedPayload(parsed, categoryHint);
@@ -116,8 +96,6 @@ class SuggestionService {
 
     const title = deriveTitle(normalizedPayload, categoryHint);
     const body = this.buildIssueBody({
-      message: String(rawText || '').replace(/```json[\s\S]*?```/i, '').replace(/```[\s\S]*?```/i, '').trim(),
-      jsonBlock,
       normalizedPayload,
       requestedBy
     });
@@ -129,17 +107,33 @@ class SuggestionService {
       labels: ['gist-suggestion']
     };
 
-    const response = await axios.post(
-      `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues`,
-      issuePayload,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github+json',
-          'User-Agent': 'minecraft-panel-suggestions'
+    let response;
+    try {
+      response = await axios.post(
+        `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues`,
+        issuePayload,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/vnd.github+json',
+            'User-Agent': 'minecraft-panel-suggestions'
+          }
         }
+      );
+    } catch (error) {
+      const status = error?.response?.status;
+      const ghMessage = String(error?.response?.data?.message || '').trim();
+      if (status === 404) {
+        throw new Error(`GitHub repository not found or token has no access to ${repoRef}. Set GITHUB_ISSUE_REPO correctly and ensure token repository access.`);
       }
-    );
+      if (status === 401 || status === 403) {
+        throw new Error(`GitHub token is invalid or missing issue write permission for ${repoRef}.`);
+      }
+      if (status === 422) {
+        throw new Error(`GitHub rejected the issue payload: ${ghMessage || 'validation failed'}`);
+      }
+      throw new Error(`GitHub issue creation failed${status ? ` (${status})` : ''}: ${ghMessage || error.message}`);
+    }
 
     return {
       success: true,
