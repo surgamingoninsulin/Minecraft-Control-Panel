@@ -134,3 +134,13 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# custom
+backend/Server/
+backend/data/
+backend/nodemon.json
+backend/node_modules/
+frontend/node_modules/
+plans/
+logs/
+AGENTS.md

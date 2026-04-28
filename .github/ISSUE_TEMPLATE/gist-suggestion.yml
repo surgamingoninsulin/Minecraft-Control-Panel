@@ -1,0 +1,52 @@
+name: Gist Suggestion
+description: Suggest plugins, datapacks, or mods for the panel gist catalog
+title: "[Gist Suggestion] <category>: <name>"
+labels:
+  - gist-suggestion
+body:
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - plugins
+        - datapacks
+        - mods
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: Context message (optional)
+      description: Add any notes above/below the JSON block.
+      placeholder: Why should this be added?
+    validations:
+      required: false
+
+  - type: textarea
+    id: payload
+    attributes:
+      label: JSON payload
+      description: Paste a valid JSON block. Keep the top-level key as plugins, datapacks, or mods.
+      value: |
+        ```json
+        {
+          "plugins": [
+            {
+              "id": "example-plugin",
+              "name": "Example Plugin",
+              "author": "Example Author",
+              "minecraftVersion": "1.21.11",
+              "version": "1.0.0",
+              "image": "https://example.com/logo.png",
+              "directDownloadUrl": "https://example.com/plugin.jar",
+              "description": "Example description",
+              "websiteUrl": "https://example.com",
+              "dependencies": []
+            }
+          ]
+        }
+        ```
+    validations:
+      required: true

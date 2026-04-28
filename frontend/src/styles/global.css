@@ -1,0 +1,418 @@
+﻿@import url('https://fonts.googleapis.com/css2?family=Lexend:wght@700&family=Nunito+Sans:ital,wght@0,400;0,600;0,700;1,400&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  /* Minecraft Java Launcher inspired palette */
+
+  /* Backgrounds: launcher dark stone */
+  --bg-primary: #1e1e1e;
+  --bg-secondary: #252525;
+  --bg-tertiary: #303030;
+  --bg-hover: #3a3a3a;
+  --bg-sunken: #151515;
+
+  /* Minecraft terrain accents */
+  --minecraft-green: #3c8527;
+  --minecraft-green-light: #52a535;
+  --minecraft-green-dark: #2a641c;
+  --minecraft-grass: #6aaa38;
+  --minecraft-dirt: #5a3a24;
+  --minecraft-dirt-dark: #362316;
+  --minecraft-stone: #2c2c2c;
+  --minecraft-stone-light: #4a4a4a;
+  --minecraft-gold: #d0a343;
+  --minecraft-redstone: #c43c35;
+
+  /* Text colors */
+  --text-primary: #f1f1f1;
+  --text-secondary: #c6c6c6;
+  --text-muted: #8f8f8f;
+  --text-highlight: #ffffff;
+  --text-dark: #111111;
+
+  /* Compatibility aliases for existing components */
+  --accent-blue: var(--minecraft-green);
+  --accent-blue-dark: var(--minecraft-green-dark);
+  --accent-gold: var(--minecraft-gold);
+  --accent-green: var(--minecraft-green-light);
+  --accent-red: var(--minecraft-redstone);
+
+  /* Borders and shadows */
+  --border-color: #3d3d3d;
+  --border-highlight: #5a5a5a;
+  --border-dark: #111111;
+  --shadow-sm: 0 2px 0 rgba(0, 0, 0, 0.55);
+  --shadow-md: 0 4px 0 rgba(0, 0, 0, 0.45), 0 8px 16px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 6px 0 rgba(0, 0, 0, 0.5), 0 14px 28px rgba(0, 0, 0, 0.35);
+
+  /* Dimensions */
+  --sidebar-width: 260px;
+  --header-height: 70px;
+  --radius-sm: 2px;
+  --radius-md: 4px;
+}
+
+body {
+  font-family: 'Nunito Sans', sans-serif;
+  background-color: var(--bg-primary);
+  background-image:
+    linear-gradient(rgba(30, 30, 30, 0.94), rgba(30, 30, 30, 0.94)),
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.035) 0,
+      rgba(255, 255, 255, 0.035) 1px,
+      transparent 1px,
+      transparent 32px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.03) 0,
+      rgba(255, 255, 255, 0.03) 1px,
+      transparent 1px,
+      transparent 32px
+    ),
+    radial-gradient(circle at 18% 12%, rgba(60, 133, 39, 0.24), transparent 30%),
+    radial-gradient(circle at 85% 88%, rgba(90, 58, 36, 0.28), transparent 32%);
+  background-size: auto, 32px 32px, 32px 32px, auto, auto;
+  background-position: center;
+  background-attachment: fixed;
+  background-repeat: repeat;
+  color: var(--text-primary);
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: 'Lexend', sans-serif;
+  color: var(--text-highlight);
+  letter-spacing: 0.5px;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.65);
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-sunken);
+  border-left: 1px solid var(--border-dark);
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(to bottom, var(--minecraft-stone-light), var(--minecraft-stone));
+  border: 1px solid var(--border-dark);
+  border-radius: var(--radius-sm);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(to bottom, #626262, var(--minecraft-stone-light));
+}
+
+/* --- Minecraft Java Launcher Button Styles --- */
+.btn {
+  padding: 10px 24px;
+  border: 2px solid var(--border-dark);
+  border-radius: var(--radius-sm);
+  font-family: 'Lexend', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: transform 0.08s ease, filter 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  position: relative;
+  overflow: hidden;
+  image-rendering: pixelated;
+}
+
+.btn::before {
+  content: '';
+  position: absolute;
+  inset: 2px 2px auto 2px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.28);
+  pointer-events: none;
+}
+
+/* Primary launcher-style green Play button */
+.btn-primary {
+  background: linear-gradient(to bottom, var(--minecraft-green-light) 0%, var(--minecraft-green) 48%, var(--minecraft-green-dark) 100%);
+  color: var(--text-highlight);
+  border-top-color: #78c850;
+  border-right-color: #1d4614;
+  border-bottom-color: #14310e;
+  border-left-color: #1d4614;
+  box-shadow: var(--shadow-md), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.65);
+}
+
+.btn-primary:hover {
+  filter: brightness(1.12);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-lg), 0 0 16px rgba(82, 165, 53, 0.25);
+}
+
+.btn-primary:active {
+  transform: translateY(2px);
+  box-shadow: var(--shadow-sm), inset 0 3px 0 rgba(0, 0, 0, 0.28);
+}
+
+/* Danger button: redstone style */
+.btn-danger {
+  background: linear-gradient(to bottom, #de5a50 0%, var(--minecraft-redstone) 50%, #8f241f 100%);
+  color: var(--text-highlight);
+  border-top-color: #ec8a84;
+  border-right-color: #711c18;
+  border-bottom-color: #4c120f;
+  border-left-color: #711c18;
+  box-shadow: var(--shadow-sm);
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.65);
+}
+
+.btn-danger:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.btn-danger:active {
+  transform: translateY(2px);
+  box-shadow: inset 0 3px 0 rgba(0, 0, 0, 0.28);
+}
+
+/* Secondary button: stone block style */
+.btn-secondary {
+  background: linear-gradient(to bottom, #4b4b4b 0%, var(--bg-tertiary) 48%, #222222 100%);
+  color: var(--text-secondary);
+  border-top-color: #686868;
+  border-right-color: #171717;
+  border-bottom-color: #101010;
+  border-left-color: #171717;
+  box-shadow: var(--shadow-sm);
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.65);
+}
+
+.btn-secondary:hover {
+  color: var(--text-highlight);
+  filter: brightness(1.13);
+  transform: translateY(-1px);
+}
+
+.btn-secondary:active {
+  transform: translateY(2px);
+  box-shadow: inset 0 3px 0 rgba(0, 0, 0, 0.28);
+}
+
+.btn:disabled {
+  background: #242424;
+  color: #666666;
+  border-color: #151515;
+  opacity: 0.8;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+  text-shadow: none;
+}
+
+/* --- Card / Panel Styles --- */
+.card {
+  background-color: var(--bg-secondary);
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.025), rgba(0, 0, 0, 0.025)),
+    repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.018) 0,
+      rgba(255, 255, 255, 0.018) 2px,
+      transparent 2px,
+      transparent 8px
+    );
+  border: 2px solid var(--border-dark);
+  border-top-color: var(--border-highlight);
+  border-left-color: var(--border-highlight);
+  border-radius: var(--radius-md);
+  padding: 24px;
+  box-shadow: var(--shadow-lg);
+  margin-bottom: 20px;
+}
+
+.card-title {
+  font-family: 'Lexend', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 20px;
+  color: var(--text-highlight);
+  border-bottom: 2px solid var(--border-dark);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08);
+  padding-bottom: 10px;
+  display: flex;
+  align-items: center;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.65);
+}
+
+/* --- Input Styles --- */
+input[type='text'],
+input[type='password'],
+input[type='email'],
+input[type='number'],
+select,
+textarea {
+  width: 100%;
+  padding: 12px 16px;
+  background-color: var(--bg-sunken);
+  border: 2px solid var(--border-dark);
+  border-top-color: #0c0c0c;
+  border-left-color: #0c0c0c;
+  border-right-color: var(--border-color);
+  border-bottom-color: var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: 'Nunito Sans', sans-serif;
+  font-size: 14px;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+  box-shadow: inset 0 3px 0 rgba(0, 0, 0, 0.35);
+}
+
+input[type='text']::placeholder,
+input[type='password']::placeholder,
+input[type='email']::placeholder,
+input[type='number']::placeholder,
+textarea::placeholder {
+  color: #707070;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--minecraft-green-light);
+  border-top-color: var(--minecraft-green-light);
+  border-left-color: var(--minecraft-green-light);
+  box-shadow: inset 0 3px 0 rgba(0, 0, 0, 0.35), 0 0 0 2px rgba(82, 165, 53, 0.22);
+}
+
+label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+small {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  display: block;
+  margin-top: 5px;
+}
+
+/* --- Status Badges --- */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--border-dark);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: var(--shadow-sm);
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.55);
+}
+
+.status-online {
+  background: linear-gradient(to bottom, rgba(82, 165, 53, 0.32), rgba(60, 133, 39, 0.22));
+  color: #9be86d;
+  border-color: rgba(82, 165, 53, 0.65);
+}
+
+.status-offline {
+  background: linear-gradient(to bottom, rgba(78, 78, 78, 0.34), rgba(36, 36, 36, 0.34));
+  color: #bdbdbd;
+  border-color: rgba(106, 106, 106, 0.65);
+}
+
+.status-starting {
+  background: linear-gradient(to bottom, rgba(208, 163, 67, 0.32), rgba(116, 83, 28, 0.22));
+  color: #ffd86f;
+  border-color: rgba(208, 163, 67, 0.68);
+}
+
+/* --- Layout Utils --- */
+.page-title {
+  font-family: 'Lexend', sans-serif;
+  font-size: 32px;
+  color: var(--text-highlight);
+  margin-bottom: 24px;
+  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.75);
+}
+
+.fade-in {
+  animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* --- Modal / Overlay Styles --- */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(18, 18, 18, 0.88);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: modalOverlayFade 0.3s ease-out;
+}
+
+@keyframes modalOverlayFade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
