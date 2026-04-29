@@ -26,8 +26,7 @@ class AuthService {
 
         const token = jwt.sign(
             { id: user.id, username: user.user, role: user.role },
-            JWT_SECRET,
-            { expiresIn: '24h' }
+            JWT_SECRET
         );
 
         return {

@@ -1,7 +1,9 @@
 import express from 'express';
+import multer from 'multer';
 import worldService from '../services/worldService.js';
 
 const router = express.Router();
+const upload = multer({ storage: multer.memoryStorage() });
 
 router.get('/', async (req, res) => {
     try {
@@ -41,6 +43,37 @@ router.post('/:name/datapacks/install', async (req, res) => {
         res.json(result);
     } catch (error) {
         console.error('[WorldRoutes] Datapack install failed:', error?.stack || error?.message || error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/:name/datapacks/upload', upload.fields([{ name: 'datapack', maxCount: 20 }, { name: 'datapacks', maxCount: 50 }]), async (req, res) => {
+    try {
+        const singleFiles = req.files?.datapack || [];
+        const multiFiles = req.files?.datapacks || [];
+        const allFiles = [...singleFiles, ...multiFiles];
+        if (!allFiles.length) return res.status(400).json({ error: 'Datapack file is required' });
+        const metadataRaw = req.body?.metadata;
+        let metadata = {};
+        if (metadataRaw) {
+            try {
+                metadata = typeof metadataRaw === 'string' ? JSON.parse(metadataRaw) : metadataRaw;
+            } catch {
+                metadata = {};
+            }
+        }
+        const uploaded = [];
+        for (const file of allFiles) {
+            const perFileMetadata = {
+                ...metadata,
+                name: file.originalname.replace(/\.zip$/i, '')
+            };
+            const result = await worldService.uploadDatapack(req.params.name, file.originalname, file.buffer, perFileMetadata);
+            uploaded.push(result.filename || file.originalname);
+        }
+        res.json({ success: true, uploaded });
+    } catch (error) {
+        console.error('[WorldRoutes] Datapack upload failed:', error?.stack || error?.message || error);
         res.status(500).json({ error: error.message });
     }
 });

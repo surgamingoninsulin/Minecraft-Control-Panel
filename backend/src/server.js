@@ -66,6 +66,12 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
+// Serve shared static assets directly from frontend/public/static.
+const frontendPublicStaticPath = path.resolve(__dirname, '../../frontend/public/static');
+if (fs.existsSync(frontendPublicStaticPath)) {
+  app.use('/static', express.static(frontendPublicStaticPath));
+}
+
 // Serve built frontend if available (single merged deploy).
 const frontendDistPath = path.resolve(__dirname, '../../frontend/dist');
 if (fs.existsSync(frontendDistPath)) {

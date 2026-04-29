@@ -136,11 +136,18 @@ dist
 .pnp.*
 
 # custom
+# backend
 backend/Server/
 backend/data/
 backend/nodemon.json
 backend/node_modules/
+
+# frontend
 frontend/node_modules/
-plans/
-logs/
-AGENTS.md
+frontend/Server/
+
+# root
+Server/
+#plans/
+#logs/
+#AGENTS.md

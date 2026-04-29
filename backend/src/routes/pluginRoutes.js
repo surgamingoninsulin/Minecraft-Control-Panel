@@ -4,6 +4,15 @@ import pluginService from '../services/pluginService.js';
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
+const TEMP_VELOCITY_DISABLED_MESSAGE = 'Velocity plugin install/browse is temporarily disabled.';
+
+function isClientCompatibilityError(error) {
+  const message = String(error?.message || '').toLowerCase();
+  return message.includes('not available for server type')
+    || message.includes('no compatible velocity')
+    || message.includes('supports plugin/proxy server types only')
+    || message.includes('paid spigot plugins are not supported');
+}
 
 // List all plugins
 router.get('/list', async (req, res) => {
@@ -52,6 +61,10 @@ router.get('/search', async (req, res) => {
   try {
     const { provider, query, page, pageSize, serverType, serverVersion, resourceType } = req.query;
     if (!provider) return res.status(400).json({ error: 'Provider is required' });
+    if (String(serverType || '').trim().toLowerCase() === 'velocity') {
+      // TEMP DISABLED: keep backend code-path for future re-enable.
+      return res.status(400).json({ error: TEMP_VELOCITY_DISABLED_MESSAGE });
+    }
     const safeQuery = String(query || '').trim();
 
     const modProviderService = (await import('../services/modProviderService.js')).default;
@@ -79,6 +92,10 @@ router.get('/search', async (req, res) => {
 router.get('/providers', async (req, res) => {
   try {
     const { serverType, resourceType } = req.query;
+    if (String(serverType || '').trim().toLowerCase() === 'velocity') {
+      // TEMP DISABLED: keep backend code-path for future re-enable.
+      return res.json({ providers: [] });
+    }
     const modProviderService = (await import('../services/modProviderService.js')).default;
     res.json({
       providers: await modProviderService.getProviderNames({ serverType, resourceType })
@@ -94,6 +111,10 @@ router.get('/download-url', async (req, res) => {
   try {
     const { provider, modId, fileId, serverType, serverVersion, resourceType } = req.query;
     if (!provider || !modId) return res.status(400).json({ error: 'Provider and modId are required' });
+    if (String(serverType || '').trim().toLowerCase() === 'velocity') {
+      // TEMP DISABLED: keep backend code-path for future re-enable.
+      return res.status(400).json({ error: TEMP_VELOCITY_DISABLED_MESSAGE });
+    }
 
     const modProviderService = (await import('../services/modProviderService.js')).default;
     const url = await modProviderService.getDownloadUrl(provider, modId, fileId, {
@@ -110,6 +131,9 @@ router.get('/download-url', async (req, res) => {
     if (status === 404) {
       return res.status(404).json({ error: 'Provider resource was not found.' });
     }
+    if (isClientCompatibilityError(error)) {
+      return res.status(400).json({ error: error.message });
+    }
     res.status(500).json({ error: error.message });
   }
 });
@@ -120,9 +144,31 @@ router.post('/install-remote', async (req, res) => {
     const { url, filename, metadata } = req.body;
     if (!url || !filename) return res.status(400).json({ error: 'URL and filename required' });
 
+    const serverType = String(metadata?.serverType || '').trim().toLowerCase();
+    if (serverType === 'velocity') {
+      // TEMP DISABLED: keep backend code-path for future re-enable.
+      return res.status(400).json({ error: TEMP_VELOCITY_DISABLED_MESSAGE });
+    }
+    const providerKey = String(metadata?.provider || '').trim().toLowerCase();
+    const providerName = String(metadata?.providerName || '').trim().toLowerCase();
+    if (serverType === 'velocity') {
+      const looksSpigotFamily = providerKey.includes('spigot')
+        || providerName.includes('spigot')
+        || providerKey === 'paper'
+        || providerKey === 'purpur'
+        || providerName === 'paper'
+        || providerName === 'purpur';
+      if (looksSpigotFamily) {
+        return res.status(400).json({ error: 'Velocity servers only support Velocity-compatible plugins. Spigot/Paper/Purpur plugins are not compatible.' });
+      }
+    }
+
     await pluginService.installFromUrl(url, filename, metadata);
     res.json({ success: true });
   } catch (error) {
+    if (isClientCompatibilityError(error)) {
+      return res.status(400).json({ error: error.message });
+    }
     res.status(500).json({ error: error.message });
   }
 });

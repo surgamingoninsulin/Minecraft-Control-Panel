@@ -8,7 +8,12 @@ import {
 } from 'lucide-react';
 import '../styles/global.css';
 
-const PLUGIN_SERVER_TYPES = new Set(['spigot', 'paper', 'purpur', 'velocity']);
+const PLUGIN_SERVER_TYPES = new Set([
+    'spigot',
+    'paper',
+    'purpur',
+    // 'velocity', // TEMP DISABLED: proxy plugin install flow disabled for now.
+]);
 const MODDED_SERVER_TYPES = new Set(['forge', 'neoforge', 'fabric']);
 const GRID_CARD_HEIGHT_PX = 320;
 const DEFAULT_GITHUB_GIST_URL = 'https://gist.github.com/surgamingoninsulin/2b4d90991a5a5a025f69cce2282f67b7';
@@ -380,7 +385,7 @@ function PluginsPage() {
             throw new Error("Could not retrieve download URL.");
         }
 
-        const safeName = (mod.latestFileName || mod.name + '.jar').replace(/[^a-z0-9._-]/gi, '_');
+        const safeName = String(mod.latestFileName || `${mod.name}.jar`).trim();
         const metadata = {
             modId: mod.id,
             name: mod.name,
@@ -438,6 +443,36 @@ function PluginsPage() {
     const installSingle = async (mod, depList = []) => {
         const payload = await buildInstallPayload(mod, depList);
         await pluginAPI.installRemote(payload.downloadUrl, payload.safeName, payload.metadata);
+        return payload;
+    };
+
+    const verifyDependencyInstalled = async (depCard, depId, attempts = 2) => {
+        const wantedId = String(depId || depCard?.id || '').trim().toLowerCase();
+        const wantedName = String(depCard?.name || '').trim().toLowerCase();
+        const wantedFile = String(depCard?.latestFileName || '').trim().toLowerCase();
+
+        for (let i = 0; i < attempts; i += 1) {
+            try {
+                const response = await pluginAPI.list();
+                const installed = Array.isArray(response.data) ? response.data : [];
+                const found = installed.some((item) => {
+                    const itemId = String(item?.modId || '').trim().toLowerCase();
+                    const itemDisplay = String(item?.displayName || '').trim().toLowerCase();
+                    const itemFile = String(item?.name || '').trim().toLowerCase();
+                    return (wantedId && itemId === wantedId)
+                        || (wantedName && itemDisplay === wantedName)
+                        || (wantedName && itemFile.replace(/\.jar$/i, '') === wantedName.replace(/\.jar$/i, ''))
+                        || (wantedFile && itemFile === wantedFile);
+                });
+                if (found) return true;
+            } catch {
+                // keep retrying best-effort
+            }
+            if (i < attempts - 1) {
+                await new Promise((resolve) => setTimeout(resolve, 450));
+            }
+        }
+        return false;
     };
 
     const runDependencyInstallFlow = async () => {
@@ -449,20 +484,31 @@ function PluginsPage() {
         setDependencyModal((prev) => ({ ...prev, running: true }));
         try {
             for (let i = 0; i < nextRows.length; i += 1) {
-                nextRows[i] = { ...nextRows[i], status: 'installing', message: 'Installing...' };
+                nextRows[i] = { ...nextRows[i], status: 'installing', message: '' };
                 setDependencyModal((prev) => ({ ...prev, rows: [...nextRows] }));
                 const depRef = dependencies[i];
                 const depCard = await resolveDependencyCard(depRef);
                 if (!depCard) {
-                    nextRows[i] = { ...nextRows[i], status: 'failed', message: 'Not found (continuing)' };
+                    nextRows[i] = { ...nextRows[i], status: 'failed', message: '' };
                     setDependencyModal((prev) => ({ ...prev, rows: [...nextRows] }));
                     continue;
                 }
+
+                const alreadyInstalled = await verifyDependencyInstalled(depCard, depRef?.id || nextRows[i]?.id, 1);
+                if (alreadyInstalled) {
+                    nextRows[i] = { ...nextRows[i], status: 'installed', message: 'Already installed' };
+                    setDependencyModal((prev) => ({ ...prev, rows: [...nextRows] }));
+                    continue;
+                }
+
                 try {
                     await installSingle(depCard, []);
                     nextRows[i] = { ...nextRows[i], status: 'installed', message: 'Installed' };
                 } catch {
-                    nextRows[i] = { ...nextRows[i], status: 'failed', message: 'Install failed (continuing)' };
+                    const verifiedInstalled = await verifyDependencyInstalled(depCard, depRef?.id || nextRows[i]?.id, 3);
+                    nextRows[i] = verifiedInstalled
+                        ? { ...nextRows[i], status: 'installed', message: 'Installed (already present)' }
+                        : { ...nextRows[i], status: 'failed', message: '' };
                 }
                 setDependencyModal((prev) => ({ ...prev, rows: [...nextRows] }));
             }
@@ -546,7 +592,7 @@ function PluginsPage() {
                         style={activeTab !== 'installed' ? { background: 'transparent', border: 'none', color: 'var(--text-secondary)' } : {}}
                         onClick={() => setActiveTab('installed')}
                     >
-                        Installed (Plugins)
+                        Installed
                     </button>
                     <button
                         className={`btn ${activeTab === 'browse' ? 'btn-primary' : 'btn-ghost'}`}
@@ -935,7 +981,10 @@ function PluginsPage() {
                                     padding: '8px 10px'
                                 }}>
                                     <span>{row.id}</span>
-                                    <span style={{ color: row.status === 'installed' ? '#86efac' : (row.status === 'failed' ? '#fca5a5' : 'var(--text-secondary)') }}>
+                                    <span style={{ color: row.status === 'installed' ? '#86efac' : 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                        {(row.status !== 'installed' && row.status !== 'pending') && (
+                                            <img src={LOADING_SPINNER_SRC} alt="Loading" style={{ width: '14px', height: '14px' }} />
+                                        )}
                                         {row.message}
                                     </span>
                                 </div>

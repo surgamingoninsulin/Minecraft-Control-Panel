@@ -325,6 +325,31 @@ class WorldService {
     return { success: true, filename: safeName };
   }
 
+  async uploadDatapack(_name, filename, buffer, metadata = {}) {
+    if (!filename || !buffer) throw new Error('Datapack file is required');
+    const { worldName, datapacksDir } = await this.ensurePrimaryWorldDirs();
+    const safeName = sanitizeFileName(filename, `${metadata.name || 'datapack'}.zip`);
+    const outPath = path.join(datapacksDir, safeName);
+    const normalizedOutPath = outPath.replace(/\\/g, '/').toLowerCase();
+    if (normalizedOutPath.includes('/universe/worlds/') || normalizedOutPath.includes('/universe/')) {
+      throw new Error('Blocked invalid install target. Datapacks must install to <server_root>/world/datapacks only.');
+    }
+
+    await fs.writeFile(outPath, buffer);
+
+    const registry = await this.getRegistry();
+    if (!registry[worldName]) registry[worldName] = {};
+    registry[worldName][safeName] = {
+      ...metadata,
+      name: metadata.name || safeName,
+      installedAt: new Date().toISOString(),
+      provider: metadata.provider || 'manual'
+    };
+    await this.saveRegistry(registry);
+
+    return { success: true, filename: safeName };
+  }
+
   async uninstallDatapack(_name, datapackName) {
     const requestedName = path.basename(String(datapackName || '').trim());
     if (!requestedName || requestedName === '.' || requestedName === '..') throw new Error('Datapack name is required');

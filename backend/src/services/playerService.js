@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { createHash } from 'crypto';
+import axios from 'axios';
 import settingsService from './settingsService.js';
 
 class PlayerService {
@@ -16,6 +17,70 @@ class PlayerService {
         bytes[8] = (bytes[8] & 0x3f) | 0x80;
         const hex = bytes.toString('hex');
         return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    }
+
+    normalizeUuidKey(uuid) {
+        return String(uuid || '').trim().toLowerCase().replace(/-/g, '');
+    }
+
+    toDashedUuid(uuid) {
+        const key = this.normalizeUuidKey(uuid);
+        if (!/^[0-9a-f]{32}$/.test(key)) return String(uuid || '').trim();
+        return `${key.slice(0, 8)}-${key.slice(8, 12)}-${key.slice(12, 16)}-${key.slice(16, 20)}-${key.slice(20)}`;
+    }
+
+    async fetchMinecraftProfileByName(name) {
+        const cleanName = this.normalizePlayerName(name);
+        if (!cleanName) return null;
+        try {
+            const response = await axios.get(
+                `https://api.mojang.com/users/profiles/minecraft/${encodeURIComponent(cleanName)}`,
+                { timeout: 7000, validateStatus: () => true }
+            );
+            if (response.status !== 200 || !response.data?.id || !response.data?.name) return null;
+            return {
+                uuid: this.toDashedUuid(response.data.id),
+                name: String(response.data.name)
+            };
+        } catch {
+            return null;
+        }
+    }
+
+    async resolveIdentity({ uuid, name } = {}) {
+        const uuidKey = this.normalizeUuidKey(uuid);
+        const providedName = this.normalizePlayerName(name);
+
+        const [usercache, whitelist, ops] = await Promise.all([
+            this.readUsercache(),
+            this.readWhitelist(),
+            this.readOps()
+        ]);
+
+        const all = [...usercache, ...whitelist, ...ops];
+        if (uuidKey) {
+            const hit = all.find((entry) => this.normalizeUuidKey(entry?.uuid) === uuidKey);
+            if (hit?.uuid) {
+                return {
+                    uuid: this.toDashedUuid(hit.uuid),
+                    name: this.normalizePlayerName(hit.name) || providedName || `Player ${uuidKey.slice(0, 8)}`
+                };
+            }
+        }
+
+        if (providedName) {
+            const mojang = await this.fetchMinecraftProfileByName(providedName);
+            if (mojang) return mojang;
+        }
+
+        if (uuidKey) {
+            return {
+                uuid: this.toDashedUuid(uuid),
+                name: providedName || `Player ${uuidKey.slice(0, 8)}`
+            };
+        }
+
+        return null;
     }
 
     async getServerPath() {
@@ -187,25 +252,28 @@ class PlayerService {
 
     async isOp(uuid) {
         const ops = await this.readOps();
-        const key = String(uuid || '').toLowerCase();
-        return ops.some((entry) => String(entry?.uuid || '').toLowerCase() === key);
+        const key = this.normalizeUuidKey(uuid);
+        return ops.some((entry) => this.normalizeUuidKey(entry?.uuid) === key);
     }
 
     async setOp(uuid, isOp, name = null) {
         const ops = await this.readOps();
-        const key = String(uuid || '').toLowerCase();
-        const idx = ops.findIndex((entry) => String(entry?.uuid || '').toLowerCase() === key);
+        const identity = await this.resolveIdentity({ uuid, name });
+        const targetUuid = identity?.uuid || this.toDashedUuid(uuid);
+        const targetName = this.normalizePlayerName(identity?.name || name);
+        const key = this.normalizeUuidKey(targetUuid);
+        const idx = ops.findIndex((entry) => this.normalizeUuidKey(entry?.uuid) === key);
 
         if (isOp) {
             if (idx === -1) {
                 ops.push({
-                    uuid,
-                    name: this.normalizePlayerName(name) || `Player ${String(uuid).slice(0, 8)}`,
+                    uuid: targetUuid,
+                    name: targetName || `Player ${String(targetUuid).slice(0, 8)}`,
                     level: 4,
                     bypassesPlayerLimit: false
                 });
-            } else if (name && !ops[idx].name) {
-                ops[idx].name = this.normalizePlayerName(name);
+            } else if (targetName && ops[idx].name !== targetName) {
+                ops[idx].name = targetName;
             }
         } else if (idx !== -1) {
             ops.splice(idx, 1);
@@ -216,22 +284,26 @@ class PlayerService {
 
     async isWhitelisted(uuid) {
         const whitelist = await this.readWhitelist();
-        return whitelist.some((entry) => String(entry?.uuid || '').toLowerCase() === String(uuid || '').toLowerCase());
+        const key = this.normalizeUuidKey(uuid);
+        return whitelist.some((entry) => this.normalizeUuidKey(entry?.uuid) === key);
     }
 
     async setWhitelist(uuid, isWhitelisted, name = null) {
         const whitelist = await this.readWhitelist();
-        const key = String(uuid || '').toLowerCase();
-        const idx = whitelist.findIndex((entry) => String(entry?.uuid || '').toLowerCase() === key);
+        const identity = await this.resolveIdentity({ uuid, name });
+        const targetUuid = identity?.uuid || this.toDashedUuid(uuid);
+        const targetName = this.normalizePlayerName(identity?.name || name);
+        const key = this.normalizeUuidKey(targetUuid);
+        const idx = whitelist.findIndex((entry) => this.normalizeUuidKey(entry?.uuid) === key);
 
         if (isWhitelisted) {
             if (idx === -1) {
                 whitelist.push({
-                    uuid,
-                    name: this.normalizePlayerName(name) || `Player ${String(uuid).slice(0, 8)}`
+                    uuid: targetUuid,
+                    name: targetName || `Player ${String(targetUuid).slice(0, 8)}`
                 });
-            } else if (name && !whitelist[idx].name) {
-                whitelist[idx].name = this.normalizePlayerName(name);
+            } else if (targetName && whitelist[idx].name !== targetName) {
+                whitelist[idx].name = targetName;
             }
         } else if (idx !== -1) {
             whitelist.splice(idx, 1);
@@ -247,23 +319,26 @@ class PlayerService {
             throw new Error('Player name must be 3-16 characters (letters, numbers, underscore)');
         }
 
-        const uuid = this.toOfflineUuid(playerName);
-        await this.setWhitelist(uuid, true, playerName);
+        const profile = await this.fetchMinecraftProfileByName(playerName);
+        if (!profile) {
+            throw new Error('Could not resolve this Minecraft account from Mojang. Please use the exact Java username casing and ensure the account exists.');
+        }
+        await this.setWhitelist(profile.uuid, true, profile.name);
 
-        return { uuid, name: playerName, isOp: false, isWhitelisted: true };
+        return { uuid: profile.uuid, name: profile.name, isOp: false, isWhitelisted: true };
     }
 
     async removePlayer(uuid) {
-        const targetUuid = String(uuid || '').trim().toLowerCase();
+        const targetUuid = this.normalizeUuidKey(uuid);
         if (!targetUuid) throw new Error('Player uuid is required');
 
         const ops = await this.readOps();
         const whitelist = await this.readWhitelist();
         const usercache = await this.readUsercache();
 
-        const nextOps = ops.filter((entry) => String(entry?.uuid || '').trim().toLowerCase() !== targetUuid);
-        const nextWhitelist = whitelist.filter((entry) => String(entry?.uuid || '').trim().toLowerCase() !== targetUuid);
-        const nextUsercache = usercache.filter((entry) => String(entry?.uuid || '').trim().toLowerCase() !== targetUuid);
+        const nextOps = ops.filter((entry) => this.normalizeUuidKey(entry?.uuid) !== targetUuid);
+        const nextWhitelist = whitelist.filter((entry) => this.normalizeUuidKey(entry?.uuid) !== targetUuid);
+        const nextUsercache = usercache.filter((entry) => this.normalizeUuidKey(entry?.uuid) !== targetUuid);
 
         await Promise.all([
             this.saveOps(nextOps),

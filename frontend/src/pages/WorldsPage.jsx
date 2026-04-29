@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { RefreshCw, Search, Download, ExternalLink, Package, Trash2 } from 'lucide-react';
+import { Search, Download, ExternalLink, Package, Trash2, Upload } from 'lucide-react';
+import { useRef } from 'react';
 import { pluginAPI, worldAPI } from '../services/api';
 import * as settingsAPI from '../services/settingsApi';
 import { useDialog } from '../contexts/DialogContext';
@@ -61,6 +62,8 @@ function WorldsPage() {
     done: false,
     targetItem: null
   });
+  const [uploadingDatapack, setUploadingDatapack] = useState(false);
+  const datapackUploadInputRef = useRef(null);
 
   const fetchWorld = async () => {
     setLoading(true);
@@ -328,6 +331,38 @@ function WorldsPage() {
     }
   };
 
+  const onUploadDatapackClick = () => {
+    datapackUploadInputRef.current?.click();
+  };
+
+  const onUploadDatapackFile = async (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (!files.length) return;
+    const invalid = files.filter((file) => !/\.zip$/i.test(file.name));
+    if (invalid.length > 0) {
+      dialog.showAlert('Only .zip datapack files are allowed.');
+      return;
+    }
+    const targetWorldName = worldMeta?.name || 'world';
+    setUploadingDatapack(true);
+    try {
+      await worldAPI.uploadDatapacks(targetWorldName, files, {
+        provider: 'manual',
+        providerName: 'Manual Upload',
+        resourceType: 'datapack'
+      });
+      await fetchWorldDetail(targetWorldName);
+      setActiveTab('installed');
+      dialog.showAlert(`Uploaded ${files.length} datapack${files.length === 1 ? '' : 's'}.`, 'Success');
+    } catch (err) {
+      const backendError = err?.response?.data?.error;
+      dialog.showAlert(`Failed to upload datapack: ${backendError || err.message}`);
+    } finally {
+      setUploadingDatapack(false);
+    }
+  };
+
   const getLogo = (item) => item?.logo || getDatapackPlaceholder(item) || '';
 
   const renderDatapackCard = (item, isInstalledCard = false) => {
@@ -400,7 +435,7 @@ function WorldsPage() {
               )}
             </button>
           )}
-          {item.websiteUrl && (
+          {!isInstalledCard && item.websiteUrl && (
             <button
               className="btn btn-secondary"
               onClick={() => window.open(item.websiteUrl, '_blank')}
@@ -422,53 +457,66 @@ function WorldsPage() {
           <h1 className="page-title">World</h1>
           <p className="page-subtitle">Datapack manager</p>
         </div>
-        <button className="btn btn-secondary fetch-btn" onClick={fetchWorld} disabled={loading}>
-          {loading ? <img src={LOADING_SPINNER_SRC} alt="Loading" className="loading-spinner-icon" /> : <RefreshCw size={16} />} Refresh
-        </button>
+        <div style={{ display: 'flex', gap: '8px', background: 'var(--bg-secondary)', padding: '4px', borderRadius: '8px', border: '1px solid var(--border-color)', width: 'fit-content' }}>
+          <button
+            className={`btn ${activeTab === 'installed' ? 'btn-primary' : 'btn-ghost'}`}
+            style={activeTab !== 'installed' ? { background: 'transparent', border: 'none', color: 'var(--text-secondary)' } : {}}
+            onClick={() => setActiveTab('installed')}
+          >
+            Installed
+          </button>
+          <button
+            className={`btn ${activeTab === 'browse' ? 'btn-primary' : 'btn-ghost'}`}
+            style={activeTab !== 'browse' ? { background: 'transparent', border: 'none', color: 'var(--text-secondary)' } : {}}
+            onClick={() => setActiveTab('browse')}
+          >
+            Browse Datapacks
+          </button>
+        </div>
       </div>
 
       {error && <div className="error-message-card"><p>{error}</p></div>}
 
       <div className="worlds-layout">
         <div className="world-main">
-          <div className="card world-overview-card">
-            <h3 style={{ marginTop: 0 }}>World Overview</h3>
-            {worldMeta ? (
-              <div className="world-overview-grid">
-                <div><strong>Name:</strong> {worldMeta.displayName}</div>
-                <div><strong>Type:</strong> {worldMeta.worldType || 'Unknown'}</div>
-                <div><strong>Folder:</strong> {detail?.worldPath || 'Loading...'}</div>
-                <div><strong>Datapacks:</strong> {detail?.datapacks?.length ?? 0}</div>
-              </div>
-            ) : (
-              <p style={{ color: 'var(--text-secondary)', marginBottom: 0 }}>World not available yet.</p>
-            )}
-          </div>
-
-          <div style={{ display: 'flex', gap: '8px', background: 'var(--bg-secondary)', padding: '4px', borderRadius: '8px', border: '1px solid var(--border-color)', width: 'fit-content' }}>
-            <button
-              className={`btn ${activeTab === 'installed' ? 'btn-primary' : 'btn-ghost'}`}
-              style={activeTab !== 'installed' ? { background: 'transparent', border: 'none', color: 'var(--text-secondary)' } : {}}
-              onClick={() => setActiveTab('installed')}
-            >
-              Installed
-            </button>
-            <button
-              className={`btn ${activeTab === 'browse' ? 'btn-primary' : 'btn-ghost'}`}
-              style={activeTab !== 'browse' ? { background: 'transparent', border: 'none', color: 'var(--text-secondary)' } : {}}
-              onClick={() => setActiveTab('browse')}
-            >
-              Browse
-            </button>
-          </div>
-
           {activeTab === 'installed' && (
+            <>
+            <div className="card" style={{ padding: '20px', marginBottom: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', color: 'var(--text-secondary)' }}>
+                <Package size={24} />
+                <span>
+                  <strong>{detail?.datapacks?.length || 0}</strong> datapacks installed
+                </span>
+              </div>
+              <div>
+                <input
+                  ref={datapackUploadInputRef}
+                  type="file"
+                  multiple
+                  accept=".zip,application/zip"
+                  style={{ display: 'none' }}
+                  onChange={onUploadDatapackFile}
+                />
+                <button
+                  className="btn btn-secondary"
+                  onClick={onUploadDatapackClick}
+                  disabled={uploadingDatapack}
+                >
+                  {uploadingDatapack ? (
+                    <><img src={LOADING_SPINNER_SRC} alt="Uploading" className="loading-spinner-icon" /> Uploading...</>
+                  ) : (
+                    <><Upload size={14} /> Upload Datapack</>
+                  )}
+                </button>
+              </div>
+            </div>
             <div className="datapack-grid">
               {(detail?.datapacks || []).map((dp) => renderDatapackCard(dp, true))}
               {detail && (detail.datapacks || []).length === 0 && (
                 <div className="card" style={{ color: 'var(--text-secondary)' }}>No datapacks installed yet.</div>
               )}
             </div>
+            </>
           )}
 
           {activeTab === 'browse' && (
@@ -492,9 +540,6 @@ function WorldsPage() {
 
               <div className="datapack-grid">
                 {(results || []).map((item) => renderDatapackCard(item, false))}
-                {!searchLoading && results.length === 0 && (
-                  <div className="card" style={{ color: 'var(--text-secondary)' }}>No datapacks found.</div>
-                )}
               </div>
 
               {(results.length > 0 || searchPage > 1) && (

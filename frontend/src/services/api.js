@@ -123,6 +123,24 @@ export const worldAPI = {
   get: (name) => api.get(`/worlds/${encodeURIComponent(name)}`),
   saveConfig: (name, config) => api.post(`/worlds/${encodeURIComponent(name)}/config`, config),
   installDatapack: (name, url, filename, metadata) => api.post(`/worlds/${encodeURIComponent(name)}/datapacks/install`, { url, filename, metadata }),
+  uploadDatapack: (name, file, metadata = {}) => {
+    const formData = new FormData();
+    formData.append('datapack', file);
+    formData.append('metadata', JSON.stringify(metadata));
+    return api.post(`/worlds/${encodeURIComponent(name)}/datapacks/upload`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+  uploadDatapacks: (name, files, metadata = {}) => {
+    const formData = new FormData();
+    Array.from(files || []).forEach((file) => {
+      formData.append('datapacks', file);
+    });
+    formData.append('metadata', JSON.stringify(metadata));
+    return api.post(`/worlds/${encodeURIComponent(name)}/datapacks/upload`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
   deleteDatapack: (name, datapackName) => api.delete(`/worlds/${encodeURIComponent(name)}/datapacks/delete`, { data: { datapackName } })
 };
 

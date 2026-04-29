@@ -5,7 +5,7 @@ import os
 import re
 import sys
 import urllib.request
-import xml.etree.ElementTree as ET
+import zipfile
 
 USER_AGENT = 'MinecraftPanelDownloader/1.0'
 MCJARS_BASE = "https://mcjars.app/api/v1/builds"
@@ -191,63 +191,13 @@ def get_fabric_url(version):
 
 
 def get_forge_url(version):
-    if not version:
-        raise RuntimeError("Forge requires a Minecraft version (e.g. 1.20.1)")
-
-    promotions = read_json("https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json")
-    promos = promotions.get("promos", {})
-    forge_version = promos.get(f"{version}-recommended") or promos.get(f"{version}-latest")
-    if not forge_version:
-        raise RuntimeError(f"Forge version mapping not found for Minecraft {version}")
-
-    artifact = f"{version}-{forge_version}"
-    url = f"https://maven.minecraftforge.net/net/minecraftforge/forge/{artifact}/forge-{artifact}-installer.jar"
-    return url, version
+    # Use MCJars forge server runtime artifact, never installer jars.
+    return get_mcjars_url("forge", version)
 
 
 def get_neoforge_url(version):
-    metadata_xml = read_text("https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml")
-    root = ET.fromstring(metadata_xml)
-    version_nodes = root.findall("./versioning/versions/version")
-    versions = [node.text for node in version_nodes if node.text]
-
-    if not versions:
-        raise RuntimeError("No NeoForge versions available")
-
-    selected = None
-    if version:
-        req = str(version).strip()
-        exact = [v for v in versions if v == req]
-        if exact:
-            selected = exact[-1]
-        else:
-            # NeoForge versions are not always in plain Minecraft format.
-            # Accept a few common mappings from MC versions, e.g. 1.21.1 -> 21.1.*
-            candidates = [req]
-            if req.startswith("1."):
-                stripped = req[2:]
-                candidates.append(stripped)
-                stripped_parts = stripped.split(".")
-                if len(stripped_parts) >= 2:
-                    candidates.append(f"{stripped_parts[0]}.{stripped_parts[1]}")
-            req_parts = req.split(".")
-            if len(req_parts) >= 2:
-                candidates.append(f"{req_parts[0]}.{req_parts[1]}")
-
-            for candidate in candidates:
-                prefixed = [v for v in versions if v.startswith(candidate)]
-                if prefixed:
-                    selected = prefixed[-1]
-                    break
-
-            if not selected:
-                raise RuntimeError(f"NeoForge version mapping not found for Minecraft {version}")
-
-    if not selected:
-        selected = versions[-1]
-
-    url = f"https://maven.neoforged.net/releases/net/neoforged/neoforge/{selected}/neoforge-{selected}-installer.jar"
-    return url, selected
+    # Use MCJars neoforge server runtime artifact, never installer jars.
+    return get_mcjars_url("neoforge", version)
 
 
 def get_spigot_url(version):
@@ -301,6 +251,45 @@ def download_file(url, output_path):
                 emit_progress(pct, "Downloading server files")
 
 
+def maybe_unwrap_embedded_server_jar(output_path, target_dir):
+    # Some provider artifacts ship a .zip (or a zip-like blob) that contains
+    # the runnable server jar. If we saved that blob directly as .jar, Java
+    # reports "Invalid or corrupt jarfile". In that case, extract inner jar.
+    if not output_path.lower().endswith(".jar"):
+        return
+    if not zipfile.is_zipfile(output_path):
+        return
+
+    with zipfile.ZipFile(output_path, "r") as zf:
+        names = zf.namelist()
+        if "META-INF/MANIFEST.MF" in names:
+            # Already a runnable jar archive (or at least a normal jar layout).
+            return
+
+        inner_jars = [n for n in names if n.lower().endswith(".jar") and not n.endswith("/")]
+        if not inner_jars:
+            return
+
+        # Extract all files first so bundled libraries/config are available.
+        # Forge server bundles often rely on adjacent /libraries content.
+        for name in names:
+            if name.endswith("/"):
+                continue
+            normalized = os.path.normpath(name).replace("\\", "/")
+            if normalized.startswith("../") or normalized.startswith("..\\") or os.path.isabs(normalized):
+                continue
+            dest_path = os.path.join(target_dir, normalized)
+            os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+            with zf.open(name) as src, open(dest_path, "wb") as dst:
+                dst.write(src.read())
+
+        preferred = next((n for n in inner_jars if os.path.basename(n).lower() == "server.jar"), inner_jars[0])
+        data = zf.read(preferred)
+
+    with open(output_path, "wb") as f:
+        f.write(data)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Minecraft panel server downloader")
     parser.add_argument("--target-path", required=True)
@@ -325,6 +314,7 @@ def main():
     emit_progress(8, f"Resolved {args.server_type} {resolved_version}")
     output_path = os.path.join(target, jar_file)
     download_file(url, output_path)
+    maybe_unwrap_embedded_server_jar(output_path, target)
 
     emit_progress(100, "Download complete")
     print(f"DONE:{output_path}", flush=True)

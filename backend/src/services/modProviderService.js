@@ -2,7 +2,12 @@ import axios from 'axios';
 
 const PLACEHOLDER_LOGO = '';
 const HANGAR_FALLBACK_LOGO = '/static/images/hangar.svg';
-const PLUGIN_SERVER_TYPES = new Set(['spigot', 'paper', 'purpur', 'velocity']);
+const PLUGIN_SERVER_TYPES = new Set([
+  'spigot',
+  'paper',
+  'purpur',
+  // 'velocity', // TEMP DISABLED: proxy plugin flow disabled for now.
+]);
 const MODDED_SERVER_TYPES = new Set(['forge', 'neoforge', 'fabric']);
 const DEFAULT_GIST_FILE = 'gist_minecraft_plugins.json';
 const DEFAULT_GITHUB_HEADERS = {
@@ -43,7 +48,7 @@ function getHangarPlatformHints(serverType) {
   if (st === 'spigot') return ['SPIGOT', 'PAPER'];
   if (st === 'paper') return ['PAPER', 'SPIGOT'];
   if (st === 'purpur') return ['PAPER', 'SPIGOT'];
-  if (st === 'velocity') return ['VELOCITY', 'WATERFALL'];
+  // if (st === 'velocity') return ['VELOCITY', 'WATERFALL']; // TEMP DISABLED.
   return [];
 }
 
@@ -135,6 +140,26 @@ function getSectionEntries(payload, section) {
   if (Array.isArray(payload.items)) return payload.items;
   if (Array.isArray(payload.resources)) return payload.resources;
   return [];
+}
+
+function isVelocityLike(serverType) {
+  const normalized = String(serverType || '').trim().toLowerCase();
+  return normalized === 'velocity';
+}
+
+function isProviderTokenHeaderIssue(error) {
+  const status = error?.response?.status;
+  const rawMsg = String(
+    error?.response?.data?.error
+    || error?.response?.data?.message
+    || error?.message
+    || ''
+  ).toLowerCase();
+  if (status === 401 || status === 403) return true;
+  if (status === 400 && (rawMsg.includes('no token provided') || rawMsg.includes('invalid authorization'))) {
+    return true;
+  }
+  return false;
 }
 
 function normalizeDependencyEntries(entries) {
@@ -679,8 +704,7 @@ class HangarProvider extends ModProvider {
           headers: authHeaders
         });
       } catch (error) {
-        const status = error?.response?.status;
-        if (providerSettings.apiKey && (status === 401 || status === 403)) {
+        if (providerSettings.apiKey && isProviderTokenHeaderIssue(error)) {
           return axios.get(`${this.baseUrl}/projects`, {
             params: {
               query: apiQuery || '',
@@ -791,8 +815,7 @@ class HangarProvider extends ModProvider {
         headers: authHeaders
       });
     } catch (error) {
-      const status = error?.response?.status;
-      if (providerSettings.apiKey && (status === 401 || status === 403)) {
+      if (providerSettings.apiKey && isProviderTokenHeaderIssue(error)) {
         response = await axios.get(`${this.baseUrl}/projects/${owner}/${slug}/versions`, {
           params: {
             limit: 30,
@@ -836,6 +859,18 @@ class HangarProvider extends ModProvider {
     for (const platform of platformOrder) {
       const url = selected.downloads?.[platform]?.downloadUrl;
       if (url) return url;
+    }
+
+    if (isVelocityLike(options.serverType)) {
+      // For proxy mode, stay strict on VELOCITY/WATERFALL compatibility,
+      // but scan all returned versions before failing.
+      for (const version of versions) {
+        for (const platform of ['VELOCITY', 'WATERFALL']) {
+          const url = version.downloads?.[platform]?.downloadUrl;
+          if (url) return url;
+        }
+      }
+      throw new Error('No compatible Velocity/Waterfall download found for this Hangar project/version.');
     }
 
     for (const version of versions) {
@@ -1317,6 +1352,9 @@ class ModProviderService {
     }
 
     if (mode === 'plugin') {
+      if (String(options.serverType || '').trim().toLowerCase() === 'velocity') {
+        return allNames.filter((name) => ['Hangar', 'Github Plugins'].includes(name));
+      }
       // Community github gists are merged into the built-in Github provider catalog.
       // Keep provider list stable and avoid adding separate community entries.
       return allNames.filter((name) => builtInPluginNames.includes(name));

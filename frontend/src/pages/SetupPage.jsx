@@ -11,7 +11,16 @@ import './LoginPage.css';
 import './SetupPage.css';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
-const SERVER_TYPES = ['vanilla', 'spigot', 'paper', 'purpur', 'forge', 'neoforge', 'fabric', 'velocity'];
+const SERVER_TYPES = [
+    'vanilla',
+    'spigot',
+    'paper',
+    'purpur',
+    'forge',
+    'neoforge',
+    'fabric',
+    // 'velocity', // TEMP DISABLED: proxy install flow currently unstable; keep for future re-enable.
+];
 
 const suggestJarFile = (type, version) => {
     const safeType = (type || 'server').toLowerCase();

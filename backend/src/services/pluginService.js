@@ -179,19 +179,21 @@ class PluginService {
 
   async uploadPlugin(filename, buffer) {
     const modsPath = await this.getInstallPath();
-    const filePath = path.join(modsPath, filename);
+    const resolvedName = path.basename(String(filename || '').trim());
+    if (!resolvedName) throw new Error('Invalid plugin filename');
+    const filePath = path.join(modsPath, resolvedName);
     await fs.writeFile(filePath, buffer);
 
     // Register as manual upload
     const registry = await this.getRegistry();
-    registry[filename] = {
-      name: filename,
+    registry[resolvedName] = {
+      name: resolvedName,
       provider: 'manual',
       uploadedAt: new Date().toISOString()
     };
     await this.saveRegistry(registry);
 
-    return { success: true, name: filename };
+    return { success: true, name: resolvedName };
   }
 
   async deletePlugin(filename) {
@@ -223,8 +225,12 @@ class PluginService {
       return { success: true, skipped: true };
     }
     visited.add(installKey);
+    const resolvedName = path.basename(String(filename || '').trim());
+    if (!resolvedName) {
+      throw new Error('Dependency download failed: invalid filename');
+    }
     const modsPath = await this.getInstallPath();
-    const filePath = path.join(modsPath, filename);
+    const filePath = path.join(modsPath, resolvedName);
 
     let response;
     try {
@@ -247,7 +253,7 @@ class PluginService {
         fallbackUrl = null;
       }
       if (!fallbackUrl) {
-        throw new Error(`Dependency download failed for ${filename}: ${error?.message || 'unknown error'}`);
+        throw new Error(`Dependency download failed for ${resolvedName}: ${error?.message || 'unknown error'}`);
       }
       response = await axios({
         url: fallbackUrl,
@@ -277,7 +283,7 @@ class PluginService {
 
     // Save metadata
     const registry = await this.getRegistry();
-    registry[filename] = {
+    registry[resolvedName] = {
       ...metadata,
       installedAt: new Date().toISOString(),
       provider: metadata.provider || 'remote'

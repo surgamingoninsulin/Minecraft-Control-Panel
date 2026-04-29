@@ -177,11 +177,24 @@ class ServerService extends EventEmitter {
       // Running from panel means a non-interactive terminal; disable advanced JLine terminal probing.
       const isJavaCommand = /(^|\\|\/)java(?:\.exe)?$/i.test(command) || command.toLowerCase() === 'java';
       if (isJavaCommand) {
+        const serverType = String(settings.serverType || '').trim().toLowerCase();
+
+        // First-run hardening for Fabric/Forge/NeoForge: ensure baseline files exist
+        // so the first boot doesn't emit noisy "NoSuchFileException: server.properties".
+        await this.ensureBaselineServerFiles(settings.serverPath, serverType);
+
         if (!args.some((arg) => arg.startsWith('-Dterminal.jline='))) {
           args.unshift('-Dterminal.jline=false');
         }
         if (!args.some((arg) => arg.startsWith('-Dterminal.ansi='))) {
           args.unshift('-Dterminal.ansi=true');
+        }
+
+        // For modded stacks, disable native Netty transport probing to avoid
+        // platform-native debug noise (kqueue/epoll init traces on Windows).
+        if (['forge', 'neoforge', 'fabric'].includes(serverType)
+          && !args.some((arg) => arg.startsWith('-Dio.netty.transport.noNative='))) {
+          args.unshift('-Dio.netty.transport.noNative=true');
         }
       }
 
@@ -372,6 +385,86 @@ class ServerService extends EventEmitter {
       this.emit('statusChange', 'offline');
       this.writeLifecycleLog(`Start failed: ${error.message}`);
       throw error;
+    }
+  }
+
+  async ensureBaselineServerFiles(serverPath, serverType) {
+    if (!serverPath) return;
+    const normalized = String(serverType || '').trim().toLowerCase();
+    if (!['forge', 'neoforge', 'fabric'].includes(normalized)) return;
+
+    const serverPropertiesPath = path.join(serverPath, 'server.properties');
+    const eulaPath = path.join(serverPath, 'eula.txt');
+
+    try {
+      await fs.access(serverPropertiesPath);
+    } catch {
+      const defaultProperties = [
+        'enable-jmx-monitoring=false',
+        'rcon.port=25575',
+        'level-seed=',
+        'gamemode=survival',
+        'enable-command-block=false',
+        'enable-query=false',
+        'generator-settings={}',
+        'enforce-secure-profile=true',
+        'level-name=world',
+        'motd=A Minecraft Server',
+        'query.port=25565',
+        'pvp=true',
+        'difficulty=easy',
+        'network-compression-threshold=256',
+        'max-tick-time=60000',
+        'require-resource-pack=false',
+        'use-native-transport=true',
+        'max-players=20',
+        'online-mode=true',
+        'enable-status=true',
+        'allow-flight=false',
+        'broadcast-rcon-to-ops=true',
+        'view-distance=10',
+        'server-ip=',
+        'resource-pack-prompt=',
+        'allow-nether=true',
+        'server-port=25565',
+        'enable-rcon=false',
+        'sync-chunk-writes=true',
+        'op-permission-level=4',
+        'prevent-proxy-connections=false',
+        'hide-online-players=false',
+        'resource-pack=',
+        'entity-broadcast-range-percentage=100',
+        'simulation-distance=10',
+        'rcon.password=',
+        'player-idle-timeout=0',
+        'force-gamemode=false',
+        'rate-limit=0',
+        'hardcore=false',
+        'white-list=false',
+        'broadcast-console-to-ops=true',
+        'spawn-npcs=true',
+        'spawn-animals=true',
+        'function-permission-level=2',
+        'initial-disabled-packs=',
+        'level-type=minecraft\\:normal',
+        'text-filtering-config=',
+        'spawn-monsters=true',
+        'enforce-whitelist=false',
+        'spawn-protection=16',
+        'resource-pack-sha1=',
+        'max-world-size=29999984'
+      ].join('\n') + '\n';
+      await fs.writeFile(serverPropertiesPath, defaultProperties, 'utf8');
+      await this.writeLifecycleLog('Created baseline server.properties for modded first-run startup.');
+    }
+
+    try {
+      await fs.access(eulaPath);
+    } catch {
+      const now = new Date().toUTCString();
+      const eulaContents = `# By changing the setting below to TRUE you are indicating your agreement to the EULA.\n# ${now}\neula=true\n`;
+      await fs.writeFile(eulaPath, eulaContents, 'utf8');
+      await this.writeLifecycleLog('Created baseline eula.txt for modded first-run startup.');
     }
   }
 
