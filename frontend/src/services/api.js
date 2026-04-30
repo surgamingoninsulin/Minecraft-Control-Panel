@@ -150,7 +150,8 @@ export const userAPI = {
   create: (data) => api.post('/users', data),
   update: (id, data) => api.put(`/users/${id}`, data),
   delete: (id) => api.delete(`/users/${id}`),
-  toggleActive: (id) => api.post(`/users/${id}/toggle-active`)
+  toggleActive: (id) => api.post(`/users/${id}/toggle-active`),
+  generateResetSecret: (id) => api.post(`/users/${id}/generate-reset-secret`)
 };
 
 // Player API

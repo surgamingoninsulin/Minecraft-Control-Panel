@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { userAPI } from '../services/api';
-import { User, UserPlus, UserMinus, Shield, ShieldAlert, Edit2, Trash2, Power, PowerOff, Check, X } from 'lucide-react';
+import { User, UserPlus, Shield, ShieldAlert, Edit2, Trash2, Power, PowerOff, Check, X, KeyRound } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useDialog } from '../contexts/DialogContext';
 import './UsersPage.css';
@@ -93,6 +93,19 @@ function UsersPage() {
         }
     };
 
+    const handleGenerateSecret = async (targetUser) => {
+        try {
+            const response = await userAPI.generateResetSecret(targetUser.id);
+            const secret = response?.data?.secretKey || '';
+            await showAlert(
+                `Reset secret for ${targetUser.user}: ${secret}\n\nStore this now. It is only shown once.`,
+                'Reset Secret Generated'
+            );
+        } catch (err) {
+            await showAlert(err.response?.data?.error || 'Failed to generate reset secret', 'Error');
+        }
+    };
+
     const openModal = (user = null) => {
         if (user) {
             setEditingUser(user);
@@ -170,7 +183,7 @@ function UsersPage() {
                                     <td>
                                         <span className={`role-badge role-${u.role}`}>
                                             {u.role === 'admin' ? <Shield size={14} /> : <ShieldAlert size={14} />}
-                                            {u.role === 'admin' ? 'Primary Admin' : 'Collaborator'}
+                                            {u.isPrimaryAdmin ? 'Primary Admin' : (u.role === 'admin' ? 'Admin' : 'Collaborator')}
                                         </span>
                                     </td>
                                     <td>{new Date(u.createdAt).toLocaleDateString()}</td>
@@ -200,6 +213,15 @@ function UsersPage() {
                                         >
                                             <Trash2 size={16} />
                                         </button>
+                                        {currentUser?.isPrimaryAdmin && (
+                                            <button
+                                                className="action-btn"
+                                                onClick={() => handleGenerateSecret(u)}
+                                                title="Generate Reset Secret"
+                                            >
+                                                <KeyRound size={16} />
+                                            </button>
+                                        )}
                                     </td>
                                 </tr>
                             ))}

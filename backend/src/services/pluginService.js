@@ -38,74 +38,113 @@ class PluginService {
     return { owner: match[1], repo: match[2].replace(/\.git$/i, '') };
   }
 
-  async resolveGithubFallbackUrl(metadata = {}, originalUrl = '') {
-    const sourceUrl = String(metadata.websiteUrl || originalUrl || '').trim();
-    const parsedPrimary = this.parseGithubRepo(sourceUrl);
+  parseGithubTagFromUrl(url) {
+    const raw = String(url || '').trim();
+    if (!raw) return '';
+    const match = raw.match(/github\.com\/[^/]+\/[^/]+\/releases\/tags?\/([^/?#]+)/i);
+    if (!match) return '';
+    try {
+      return decodeURIComponent(match[1] || '').trim();
+    } catch {
+      return String(match[1] || '').trim();
+    }
+  }
 
-    const wantedVersion = String(metadata.version || metadata.serverVersion || '').trim();
-    if (!wantedVersion) return null;
-
+  async fetchGithubReleaseAssetUrl(owner, repo, wantedVersion = '', nameHint = '') {
     const headers = {
       Accept: 'application/vnd.github+json',
       'User-Agent': 'minecraft-panel-installer'
     };
-    const ownerHints = Array.from(new Set(
-      [
-        parsedPrimary?.owner,
-        String(metadata.author || '').trim()
-      ].filter(Boolean)
-    ));
-    const repoHints = Array.from(new Set(
-      [
-        parsedPrimary?.repo,
-        String(metadata.name || '').trim().toLowerCase().replace(/\s+/g, '-'),
-        String(metadata.name || '').trim().toLowerCase().replace(/\s+/g, ''),
-        String(metadata.modId || '').trim().toLowerCase().replace(/-plugin$|-mod$|-data$/g, '')
-      ].filter(Boolean)
-    ));
+    const apiBase = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/releases`;
+    const version = String(wantedVersion || '').trim();
+    const versionLc = version.toLowerCase();
+    const nameHintLc = String(nameHint || '').trim().toLowerCase();
 
-    const tryRepo = async (owner, repo) => {
-      const apiBase = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/releases`;
-      const candidates = [];
+    const pickAsset = (release) => {
+      const assets = Array.isArray(release?.assets) ? release.assets : [];
+      const jarAssets = assets.filter((a) => String(a?.name || '').toLowerCase().endsWith('.jar'));
+      if (jarAssets.length === 0) return null;
+      if (versionLc) {
+        const exactVersion = jarAssets.find((a) => String(a?.name || '').toLowerCase().includes(versionLc));
+        if (exactVersion?.browser_download_url) return exactVersion.browser_download_url;
+      }
+      if (nameHintLc) {
+        const exactName = jarAssets.find((a) => String(a?.name || '').toLowerCase().includes(nameHintLc));
+        if (exactName?.browser_download_url) return exactName.browser_download_url;
+      }
+      return jarAssets[0]?.browser_download_url || null;
+    };
+
+    const candidates = [];
+    if (version) {
       try {
-        const byTag = await axios.get(`${apiBase}/tags/${encodeURIComponent(wantedVersion)}`, { headers });
+        const byTag = await axios.get(`${apiBase}/tags/${encodeURIComponent(version)}`, { headers });
         candidates.push(byTag.data);
       } catch { /* ignore */ }
-      try {
-        const byVTag = await axios.get(`${apiBase}/tags/${encodeURIComponent(`v${wantedVersion}`)}`, { headers });
-        candidates.push(byVTag.data);
-      } catch { /* ignore */ }
-      if (!candidates.length) {
+      if (!version.toLowerCase().startsWith('v')) {
         try {
-          const list = await axios.get(apiBase, { headers, params: { per_page: 20 } });
-          const rows = Array.isArray(list.data) ? list.data : [];
+          const byVTag = await axios.get(`${apiBase}/tags/${encodeURIComponent(`v${version}`)}`, { headers });
+          candidates.push(byVTag.data);
+        } catch { /* ignore */ }
+      }
+    }
+
+    if (!candidates.length) {
+      try {
+        const list = await axios.get(apiBase, { headers, params: { per_page: 30 } });
+        const rows = Array.isArray(list.data) ? list.data : [];
+        if (versionLc) {
           for (const rel of rows) {
             const tag = String(rel?.tag_name || '').toLowerCase();
-            if (tag === wantedVersion.toLowerCase() || tag === `v${wantedVersion}`.toLowerCase() || tag.includes(wantedVersion.toLowerCase())) {
+            if (tag === versionLc || tag === `v${versionLc}` || tag.includes(versionLc)) {
               candidates.push(rel);
             }
           }
-        } catch { /* ignore */ }
-      }
+        }
+        if (!candidates.length && rows.length > 0) {
+          candidates.push(rows[0]);
+        }
+      } catch { /* ignore */ }
+    }
 
-      const nameHint = String(metadata.name || metadata.modId || '').trim().toLowerCase();
-      for (const rel of candidates) {
-        const assets = Array.isArray(rel?.assets) ? rel.assets : [];
-        const jarAssets = assets.filter((a) => String(a?.name || '').toLowerCase().endsWith('.jar'));
-        const exact = jarAssets.find((a) => String(a?.name || '').toLowerCase().includes(wantedVersion.toLowerCase()) && (!nameHint || String(a?.name || '').toLowerCase().includes(nameHint.replace(/\s+/g, '-').toLowerCase())));
-        if (exact?.browser_download_url) return exact.browser_download_url;
-        const loose = jarAssets.find((a) => String(a?.name || '').toLowerCase().includes(wantedVersion.toLowerCase()));
-        if (loose?.browser_download_url) return loose.browser_download_url;
-        if (jarAssets[0]?.browser_download_url) return jarAssets[0].browser_download_url;
-      }
-      return null;
-    };
+    for (const rel of candidates) {
+      const resolved = pickAsset(rel);
+      if (resolved) return resolved;
+    }
+    return null;
+  }
 
-    for (const owner of ownerHints) {
-      for (const repo of repoHints) {
-        const url = await tryRepo(owner, repo);
-        if (url) return url;
-      }
+  async resolveGithubFallbackUrl(metadata = {}, originalUrl = '') {
+    const sourceUrl = String(originalUrl || metadata.websiteUrl || '').trim();
+    const parsedPrimary = this.parseGithubRepo(sourceUrl);
+    if (!parsedPrimary) return null;
+
+    const wantedVersion = String(
+      metadata.version
+      || this.parseGithubTagFromUrl(originalUrl)
+      || this.parseGithubTagFromUrl(metadata.websiteUrl)
+      || metadata.serverVersion
+      || ''
+    ).trim();
+    const nameHint = String(metadata.name || metadata.modId || '').trim();
+
+    const direct = await this.fetchGithubReleaseAssetUrl(
+      parsedPrimary.owner,
+      parsedPrimary.repo,
+      wantedVersion,
+      nameHint
+    );
+    if (direct) return direct;
+
+    const fallbackAuthor = String(metadata.author || '').trim();
+    if (fallbackAuthor && fallbackAuthor.toLowerCase() !== parsedPrimary.owner.toLowerCase()) {
+      const viaAuthor = await this.fetchGithubReleaseAssetUrl(
+        fallbackAuthor,
+        parsedPrimary.repo,
+        wantedVersion,
+        nameHint
+      );
+      if (viaAuthor) return viaAuthor;
     }
     return null;
   }
@@ -232,10 +271,44 @@ class PluginService {
     const modsPath = await this.getInstallPath();
     const filePath = path.join(modsPath, resolvedName);
 
+    // If the same modId was previously installed under a different filename
+    // (for example from older naming logic), remove the stale variant.
+    const incomingModId = String(metadata?.modId || '').trim();
+    if (incomingModId) {
+      const registry = await this.getRegistry();
+      const staleNames = Object.keys(registry || {}).filter((entryName) => {
+        const meta = registry?.[entryName] || {};
+        return String(meta?.modId || '').trim() === incomingModId
+          && String(entryName || '').toLowerCase() !== resolvedName.toLowerCase();
+      });
+
+      for (const staleName of staleNames) {
+        try {
+          await fs.unlink(path.join(modsPath, staleName));
+        } catch {
+          // Best-effort cleanup; continue install.
+        }
+        delete registry[staleName];
+      }
+
+      if (staleNames.length > 0) {
+        await this.saveRegistry(registry);
+      }
+    }
+
+    let effectiveUrl = String(url || '').trim();
     let response;
     try {
+      // GitHub release/tag pages are not direct binary links; resolve to a real asset URL first.
+      if (/github\.com\/[^/]+\/[^/]+\/releases\/tags?\//i.test(effectiveUrl)) {
+        const githubAssetUrl = await this.resolveGithubFallbackUrl(metadata, effectiveUrl);
+        if (githubAssetUrl) {
+          effectiveUrl = githubAssetUrl;
+        }
+      }
+
       response = await axios({
-        url,
+        url: effectiveUrl,
         method: 'GET',
         responseType: 'stream',
         timeout: 60000,
@@ -248,7 +321,7 @@ class PluginService {
     } catch (error) {
       let fallbackUrl = null;
       try {
-        fallbackUrl = await this.resolveGithubFallbackUrl(metadata, url);
+        fallbackUrl = await this.resolveGithubFallbackUrl(metadata, effectiveUrl || url);
       } catch {
         fallbackUrl = null;
       }
@@ -293,7 +366,7 @@ class PluginService {
     // Install dependencies (best-effort).
     const dependencies = await dependencyService.resolveAll({
       metadata,
-      downloadUrl: url,
+      downloadUrl: effectiveUrl || url,
       context: {
         providerName: metadata.providerName || '',
         serverType: metadata.serverType || '',

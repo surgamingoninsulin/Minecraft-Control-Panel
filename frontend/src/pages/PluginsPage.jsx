@@ -389,6 +389,7 @@ function PluginsPage() {
         const metadata = {
             modId: mod.id,
             name: mod.name,
+            version: mod?.metadata?.version || mod?.version || '',
             logo: mod.logo,
             summary: mod.summary,
             websiteUrl: mod.websiteUrl,

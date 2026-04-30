@@ -14,8 +14,11 @@ router.get('/', isAdmin, async (req, res) => {
             console.error('[UserRoutes] userService.getAll() did not return an array:', users);
             return res.json([]);
         }
-        // Strip passwords before sending
-        const safeUsers = users.map(({ password, ...rest }) => rest);
+        const primaryAdmin = userService.getPrimaryAdmin(users);
+        const primaryAdminId = primaryAdmin?.id || null;
+        const safeUsers = users
+            .map((entry) => userService.sanitize(entry, primaryAdminId))
+            .filter(Boolean);
         res.json(safeUsers);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -59,6 +62,15 @@ router.post('/:id/toggle-active', isAdmin, async (req, res) => {
         res.json(updated);
     } catch (error) {
         res.status(400).json({ error: error.message });
+    }
+});
+
+router.post('/:id/generate-reset-secret', isAdmin, async (req, res) => {
+    try {
+        const result = await userService.generateResetSecret(req.params.id, req.user.id);
+        res.json({ success: true, ...result });
+    } catch (error) {
+        res.status(403).json({ error: error.message });
     }
 });
 

@@ -188,7 +188,7 @@ function WorldsPage() {
       });
 
       await fetchWorldDetail(targetWorldName);
-      setActiveTab('installed');
+      setActiveTab('browse');
       dialog.showAlert(`Installed datapack "${item.name}" in ${targetWorldName}.`, 'Success');
     } catch (err) {
       const backendError = err?.response?.data?.error;
@@ -353,7 +353,7 @@ function WorldsPage() {
         resourceType: 'datapack'
       });
       await fetchWorldDetail(targetWorldName);
-      setActiveTab('installed');
+      setActiveTab('browse');
       dialog.showAlert(`Uploaded ${files.length} datapack${files.length === 1 ? '' : 's'}.`, 'Success');
     } catch (err) {
       const backendError = err?.response?.data?.error;

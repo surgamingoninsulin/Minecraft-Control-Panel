@@ -149,6 +149,9 @@ class ServerService extends EventEmitter {
         throw new Error('Server path is not configured. Please go to Settings.');
       }
 
+      // Keep server icon present in root for newly created/reset server folders.
+      await settingsService.ensureServerIconInRoot(settings.serverPath);
+
       this.status = 'starting';
       this.stopRequested = false;
       this.emit('statusChange', 'starting');
@@ -513,8 +516,30 @@ class ServerService extends EventEmitter {
   }
 
   async restart() {
+    // If already offline, treat restart as start.
+    if (this.status === 'offline' && !this.process) {
+      return this.start();
+    }
+
+    // If currently stopping, wait for full stop and then start again.
+    const waitForOffline = async (timeoutMs = 45000) => {
+      const startedAt = Date.now();
+      while (Date.now() - startedAt < timeoutMs) {
+        if (this.status === 'offline' && !this.process) return;
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+      throw new Error('Restart timed out while waiting for server to stop completely.');
+    };
+
+    if (this.status === 'stopping') {
+      await waitForOffline();
+      return this.start();
+    }
+
     await this.stop();
-    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // Wait until process is fully offline before attempting a new start.
+    await waitForOffline();
     return this.start();
   }
 

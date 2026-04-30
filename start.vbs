@@ -4,9 +4,9 @@ Const ForWriting = 2
 Const ForAppending = 8
 
 Dim shell, fso, scriptDir, logDir, latestLogPath
-Dim backendDir, frontendDir, backendCmd, frontendCmd, siteUrl
-Dim backendOutputLogPath, frontendOutputLogPath, installLogPath
-Dim backendRunning, frontendRunning
+Dim backendDir, frontendDir, backendCmd, frontendCmd, caddyCmd, caddyConfigPath, siteUrl, usersFilePath
+Dim backendOutputLogPath, frontendOutputLogPath, installLogPath, caddyOutputLogPath
+Dim backendRunning, frontendRunning, caddyRunning
 
 Set shell = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
@@ -18,6 +18,7 @@ latestLogPath = logDir & "\latest.log"
 backendOutputLogPath = logDir & "\backend.log"
 frontendOutputLogPath = logDir & "\frontend.log"
 installLogPath = logDir & "\install.log"
+caddyOutputLogPath = logDir & "\caddy.log"
 
 InitLogs
 LogMessage "=== start.vbs run started ==="
@@ -33,23 +34,34 @@ End If
 
 backendDir = scriptDir & "\backend"
 frontendDir = scriptDir & "\frontend"
+usersFilePath = backendDir & "\data\users.json"
 LogMessage "Backend dir: " & backendDir
 LogMessage "Frontend dir: " & frontendDir
 
 EnsureNodeModules backendDir
 EnsureNodeModules frontendDir
 
-backendCmd = "cmd /c cd /d """ & backendDir & """ && npm start >> """ & backendOutputLogPath & """ 2>&1"
+backendCmd = "cmd /c cd /d """ & backendDir & """ && set PORT=8080 && npm start >> """ & backendOutputLogPath & """ 2>&1"
 frontendCmd = "cmd /c cd /d """ & frontendDir & """ && npm run dev >> """ & frontendOutputLogPath & """ 2>&1"
-siteUrl = "http://localhost:5173"
-backendRunning = IsPortListening(3000)
+caddyConfigPath = scriptDir & "\deploy\caddy\Caddyfile.template"
+caddyCmd = "cmd /c caddy run --config """ & caddyConfigPath & """ >> """ & caddyOutputLogPath & """ 2>&1"
+If NeedsSetup(usersFilePath) Then
+  siteUrl = "https://minecraft-control-panel.duckdns.org/setup"
+  LogMessage "Detected empty users.json. Opening setup URL."
+Else
+  siteUrl = "https://minecraft-control-panel.duckdns.org/login"
+  LogMessage "Detected existing users. Opening login URL."
+End If
+backendRunning = IsPortListening(8080)
 frontendRunning = IsPortListening(5173)
-LogMessage "Port 3000 listening: " & CStr(backendRunning)
+LogMessage "Port 8080 listening: " & CStr(backendRunning)
 LogMessage "Port 5173 listening: " & CStr(frontendRunning)
+caddyRunning = IsPortListening(443)
+LogMessage "Port 443 listening (Caddy HTTPS): " & CStr(caddyRunning)
 
 ' 0 = hidden window, False = don't wait for completion.
 If Not backendRunning Then
-  LaunchHiddenNoWait backendCmd, "Start backend (npm start)"
+  LaunchHiddenNoWait backendCmd, "Start backend (npm start, PORT=8080)"
 Else
   LogMessage "Backend already running. Skipping launch."
 End If
@@ -60,16 +72,24 @@ Else
   LogMessage "Frontend already running. Skipping launch."
 End If
 
+If Not caddyRunning Then
+  LaunchHiddenNoWait caddyCmd, "Start Caddy (" & caddyConfigPath & ")"
+Else
+  LogMessage "Caddy already running on 443. Skipping launch."
+End If
+
 ' Open the site after a short startup delay.
 LogMessage "Waiting 6000ms before opening browser."
 WScript.Sleep 6000
 shell.Run siteUrl, 1, False
 LogMessage "Requested browser open: " & siteUrl
 
-backendRunning = IsPortListening(3000)
+backendRunning = IsPortListening(8080)
 frontendRunning = IsPortListening(5173)
-LogMessage "Post-launch port 3000 listening: " & CStr(backendRunning)
+LogMessage "Post-launch port 8080 listening: " & CStr(backendRunning)
 LogMessage "Post-launch port 5173 listening: " & CStr(frontendRunning)
+caddyRunning = IsPortListening(443)
+LogMessage "Post-launch port 443 listening (Caddy HTTPS): " & CStr(caddyRunning)
 LogMessage "Logs: " & latestLogPath
 LogMessage "Backend output log: " & backendOutputLogPath
 LogMessage "Frontend output log: " & frontendOutputLogPath
@@ -81,6 +101,31 @@ Function IsPortListening(port)
   checkCmd = "cmd /c netstat -ano | findstr /R /C:"":" & port & " .*LISTENING"" >nul"
   exitCode = shell.Run(checkCmd, 0, True)
   IsPortListening = (exitCode = 0)
+End Function
+
+Function NeedsSetup(filePath)
+  On Error Resume Next
+  Dim content
+  NeedsSetup = True
+
+  If Not fso.FileExists(filePath) Then
+    Exit Function
+  End If
+
+  content = ""
+  content = fso.OpenTextFile(filePath, 1, False).ReadAll
+  If Err.Number <> 0 Then
+    Err.Clear
+    NeedsSetup = True
+    Exit Function
+  End If
+
+  content = LCase(Replace(Replace(Replace(content, vbCr, ""), vbLf, ""), " ", ""))
+  If content = "[]" Then
+    NeedsSetup = True
+  Else
+    NeedsSetup = False
+  End If
 End Function
 
 Sub EnsureNodeModules(projectDir)
@@ -112,6 +157,7 @@ Sub InitLogs()
   ResetLogFile backendOutputLogPath
   ResetLogFile frontendOutputLogPath
   ResetLogFile installLogPath
+  ResetLogFile caddyOutputLogPath
 End Sub
 
 Sub ResetLogFile(filePath)
@@ -120,6 +166,7 @@ Sub ResetLogFile(filePath)
   stream.Write ""
   stream.Close
 End Sub
+
 
 Sub LogMessage(msg)
   Dim stream, stamp

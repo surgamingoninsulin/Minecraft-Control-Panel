@@ -86,6 +86,20 @@ function safeFileName(name, fallback) {
   return base || fallback;
 }
 
+function extractFileNameFromUrl(url) {
+  const raw = String(url || '').trim();
+  if (!raw) return '';
+  try {
+    const parsed = new URL(raw);
+    const pathname = String(parsed.pathname || '').trim();
+    if (!pathname) return '';
+    return decodeURIComponent(pathname.split('/').pop() || '').trim();
+  } catch {
+    const clean = raw.split('?')[0].split('#')[0];
+    return decodeURIComponent(clean.split('/').pop() || '').trim();
+  }
+}
+
 class DependencyService {
   async lookupDependenciesFromCatalog(context = {}, targetId = '') {
     const providerName = String(context.providerName || '').trim() || detectProviderFromUrl(context.downloadUrl || context.websiteUrl || '');
@@ -130,10 +144,11 @@ class DependencyService {
           });
           if (url) {
             const fallbackExt = String(context.resourceType || '').toLowerCase() === 'datapack' ? '.zip' : '.jar';
+            const inferredFromUrl = extractFileNameFromUrl(url);
             out.push({
               id: dep.id,
               url,
-              filename: safeFileName(dep.latestFileName || `${dep.name || dep.id}${fallbackExt}`, `dependency${fallbackExt}`),
+              filename: safeFileName(dep.latestFileName || inferredFromUrl || `${dep.name || dep.id}${fallbackExt}`, `dependency${fallbackExt}`),
               metadata: {
                 modId: dep.id,
                 name: dep.name || dep.id,
@@ -172,10 +187,11 @@ class DependencyService {
         // If direct ID resolution worked, do not depend on search ranking/availability.
         if (directUrl) {
           const fallbackExt = String(context.resourceType || '').toLowerCase() === 'datapack' ? '.zip' : '.jar';
+          const inferredFromUrl = extractFileNameFromUrl(directUrl);
           out.push({
             id: dep.id,
             url: directUrl,
-            filename: safeFileName(`${dep.id}${fallbackExt}`, `dependency${fallbackExt}`),
+            filename: safeFileName(dep.latestFileName || inferredFromUrl || `${dep.id}${fallbackExt}`, `dependency${fallbackExt}`),
             metadata: {
               modId: dep.id,
               name: dep.id,
@@ -214,7 +230,8 @@ class DependencyService {
 
         if (!url) continue;
         const fallbackExt = String(context.resourceType || '').toLowerCase() === 'datapack' ? '.zip' : '.jar';
-        const filename = safeFileName(item.latestFileName || `${item.name || item.id}${fallbackExt}`, `dependency${fallbackExt}`);
+        const inferredFromUrl = extractFileNameFromUrl(url);
+        const filename = safeFileName(item.latestFileName || dep.latestFileName || inferredFromUrl || `${item.name || item.id}${fallbackExt}`, `dependency${fallbackExt}`);
 
         out.push({
           id: item.id,
@@ -268,7 +285,7 @@ class DependencyService {
           resolved.push({
             id: String(dep.project_id),
             url: file.url,
-            filename: safeFileName(file.filename, wantZip ? 'dependency.zip' : 'dependency.jar'),
+            filename: safeFileName(file.filename || extractFileNameFromUrl(file.url), wantZip ? 'dependency.zip' : 'dependency.jar'),
             metadata: {
               modId: String(dep.project_id),
               name: String(chosen?.name || dep.project_id),

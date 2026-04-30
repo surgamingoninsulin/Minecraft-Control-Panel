@@ -8,6 +8,7 @@
     "dev:frontend": "npm --prefix frontend run dev",
     "build": "npm --prefix frontend run build",
     "start": "npm --prefix backend run start",
-    "start:full": "npm run build && npm run start"
+    "start:full": "npm run build && npm run start",
+    "caddy:apply": "powershell -ExecutionPolicy Bypass -File .\\deploy\\caddy\\Build-Caddyfile.ps1"
   }
 }

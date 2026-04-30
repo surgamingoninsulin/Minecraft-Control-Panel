@@ -8,7 +8,7 @@ const API_URL = import.meta.env.VITE_API_URL || '/api';
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [needsSetup, setNeedsSetup] = useState(false);
+    const [needsSetup, setNeedsSetup] = useState(true);
 
     useEffect(() => {
         const initAuth = async () => {
@@ -42,26 +42,64 @@ export function AuthProvider({ children }) {
             setNeedsSetup(response.data.needed);
         } catch (error) {
             console.error('Failed to check setup status:', error);
-            // Fail-safe: if backend is temporarily unreachable, do not block app boot forever.
-            setNeedsSetup(false);
+            // Keep setup mode on transient startup failures so first-run does not bounce to /login.
+            setNeedsSetup(true);
         }
     };
 
     const login = async (username, password) => {
         try {
             const response = await axios.post(`${API_URL}/auth/login`, { user: username, password });
-            const { token, user: userData } = response.data;
+            const { token, user: userData, forcePasswordChange } = response.data;
 
             localStorage.setItem('token', token);
             localStorage.setItem('user', JSON.stringify(userData));
             axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
             setUser(userData);
-            return { success: true };
+            return { success: true, forcePasswordChange: Boolean(forcePasswordChange) };
         } catch (error) {
             return {
                 success: false,
                 error: error.response?.data?.error || 'Error logging in'
+            };
+        }
+    };
+
+    const forgotPassword = async (username, secretKey) => {
+        try {
+            const response = await axios.post(`${API_URL}/auth/forgot-password`, {
+                user: username,
+                secretKey
+            });
+            return { success: true, data: response.data };
+        } catch (error) {
+            return {
+                success: false,
+                error: error.response?.data?.error || 'Error resetting password'
+            };
+        }
+    };
+
+    const changePassword = async (currentPassword, newPassword) => {
+        try {
+            await axios.post(`${API_URL}/auth/change-password`, {
+                currentPassword,
+                newPassword
+            });
+
+            const storedUser = localStorage.getItem('user');
+            if (storedUser) {
+                const parsed = JSON.parse(storedUser);
+                const updated = { ...parsed, forcePasswordChange: false };
+                localStorage.setItem('user', JSON.stringify(updated));
+                setUser(updated);
+            }
+            return { success: true };
+        } catch (error) {
+            return {
+                success: false,
+                error: error.response?.data?.error || 'Error changing password'
             };
         }
     };
@@ -91,6 +129,8 @@ export function AuthProvider({ children }) {
         loading,
         needsSetup,
         login,
+        forgotPassword,
+        changePassword,
         setup,
         logout,
         checkSetup

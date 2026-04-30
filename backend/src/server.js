@@ -58,7 +58,6 @@ app.use('/api/plugins', validateToken, pluginRoutes);
 app.use('/api/settings', validateToken, settingsRoutes);
 app.use('/api/playit', validateToken, playitRoutes);
 app.use('/api/worlds', validateToken, worldRoutes);
-app.use('/api/universes', validateToken, worldRoutes);
 app.use('/api/players', validateToken, playerRoutes);
 
 // Health check

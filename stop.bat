@@ -4,14 +4,12 @@ set "ROOT=%~dp0"
 
 cd /d "%ROOT%"
 
-echo Stopping Mineraft dev processes on ports 3000 and 5173...
-
-for %%P in (3000 5173) do (
-  for /f "tokens=5" %%I in ('netstat -aon ^| findstr /R /C:":%%P .*LISTENING"') do (
-    taskkill /PID %%I /F >nul 2>&1
-  )
+echo Stopping Minecraft panel processes (backend/frontend/caddy/start.vbs)...
+powershell -NoProfile -ExecutionPolicy Bypass -File ".\deploy\scripts\stop-panel.ps1"
+if errorlevel 1 (
+  echo Stop completed with warnings.
+) else (
+  echo Done.
 )
-
-echo Done.
 pause
 endlocal

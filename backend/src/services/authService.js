@@ -24,8 +24,10 @@ class AuthService {
         // Update login date
         await userService.updateLoginDate(user.id);
 
+        const isPrimaryAdmin = await userService.isPrimaryAdmin(user.id);
+
         const token = jwt.sign(
-            { id: user.id, username: user.user, role: user.role },
+            { id: user.id, username: user.user, role: user.role, isPrimaryAdmin },
             JWT_SECRET
         );
 
@@ -35,9 +37,39 @@ class AuthService {
                 id: user.id,
                 user: user.user,
                 // email: user.email,
-                role: user.role
-            }
+                role: user.role,
+                isPrimaryAdmin,
+                forcePasswordChange: Boolean(user.forcePasswordChange)
+            },
+            forcePasswordChange: Boolean(user.forcePasswordChange)
         };
+    }
+
+    async changePassword(userId, currentPassword, newPassword) {
+        if (!currentPassword || !newPassword) {
+            throw new Error('Current password and new password are required');
+        }
+
+        const user = await userService.findById(userId);
+        if (!user) {
+            throw new Error('User not found');
+        }
+
+        const isMatch = await bcrypt.compare(currentPassword, user.password);
+        if (!isMatch) {
+            throw new Error('Current password is incorrect');
+        }
+
+        if (String(newPassword).length < 8) {
+            throw new Error('New password must be at least 8 characters');
+        }
+
+        await userService.update(user.id, {
+            password: newPassword,
+            forcePasswordChange: false
+        });
+
+        return { success: true };
     }
 
     async setup(data) {

@@ -4,6 +4,7 @@ import { promisify } from 'util';
 import authService from '../services/authService.js';
 import userService from '../services/userService.js';
 import settingsService from '../services/settingsService.js';
+import { validateToken } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 const execFileAsync = promisify(execFile);
@@ -107,6 +108,30 @@ router.post('/login', async (req, res) => {
         } else {
             res.status(500).json({ error: 'An internal error occurred. Please check server console.' });
         }
+    }
+});
+
+router.post('/forgot-password', async (req, res) => {
+    try {
+        const { user, secretKey } = req.body || {};
+        const result = await userService.resetPasswordWithSecret(user, secretKey);
+        res.json({
+            success: true,
+            user: result.username,
+            temporaryPassword: result.temporaryPassword
+        });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+router.post('/change-password', validateToken, async (req, res) => {
+    try {
+        const { currentPassword, newPassword } = req.body || {};
+        const result = await authService.changePassword(req.user.id, currentPassword, newPassword);
+        res.json(result);
+    } catch (error) {
+        res.status(400).json({ error: error.message });
     }
 });
 

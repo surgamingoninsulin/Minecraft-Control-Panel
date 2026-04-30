@@ -11,7 +11,10 @@ function isClientCompatibilityError(error) {
   return message.includes('not available for server type')
     || message.includes('no compatible velocity')
     || message.includes('supports plugin/proxy server types only')
-    || message.includes('paid spigot plugins are not supported');
+    || message.includes('paid spigot plugins are not supported')
+    || message.includes('no direct hangar download url found')
+    || message.includes('no downloadable versions found on hangar')
+    || message.includes('hangar modid must be in the format');
 }
 
 // List all plugins
@@ -82,7 +85,15 @@ router.get('/search', async (req, res) => {
       return res.status(400).json({ error: 'Provider authentication failed. Check the API key/token in Providers settings.' });
     }
     if (status === 404) {
-      return res.status(404).json({ error: 'No results found for this provider query.' });
+      const fallbackPage = Number.parseInt(String(req.query?.page || ''), 10) || 1;
+      const fallbackPageSize = Number.parseInt(String(req.query?.pageSize || ''), 10) || 12;
+      return res.json({
+        items: [],
+        page: fallbackPage,
+        pageSize: fallbackPageSize,
+        total: 0,
+        hasMore: false
+      });
     }
     res.status(500).json({ error: error.message });
   }

@@ -79,6 +79,21 @@ function sanitizeFileName(name, fallback = 'plugin.jar') {
   return safe || fallback;
 }
 
+function extractFileNameFromUrl(url) {
+  const raw = String(url || '').trim();
+  if (!raw) return '';
+  try {
+    const parsed = new URL(raw);
+    const pathname = String(parsed.pathname || '').trim();
+    if (!pathname) return '';
+    const base = decodeURIComponent(pathname.split('/').pop() || '').trim();
+    return base;
+  } catch {
+    const clean = raw.split('?')[0].split('#')[0];
+    return decodeURIComponent(clean.split('/').pop() || '').trim();
+  }
+}
+
 function coerceDatapackFilename(name, fallbackBase = 'datapack') {
   const safe = sanitizeFileName(name, `${fallbackBase}.zip`);
   if (/\.zip$/i.test(safe)) return safe;
@@ -219,6 +234,13 @@ function normalizeSearchValue(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+function normalizeLooseSearchValue(value) {
+  return normalizeSearchValue(value)
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function parseSearchQuery(input) {
   const raw = String(input || '').trim();
   if (!raw) {
@@ -264,7 +286,17 @@ function matchesSearchQuery(item, parsedQuery) {
     .map((value) => normalizeSearchValue(value))
     .join(' ');
 
-  return searchable.includes(effectiveText);
+  if (searchable.includes(effectiveText)) return true;
+
+  const looseEffective = normalizeLooseSearchValue(effectiveText);
+  if (!looseEffective) return false;
+
+  const looseSearchable = normalizeLooseSearchValue(searchable);
+  if (looseSearchable.includes(looseEffective)) return true;
+
+  const tokens = looseEffective.split(' ').filter(Boolean);
+  if (tokens.length === 0) return false;
+  return tokens.every((token) => looseSearchable.includes(token));
 }
 
 class ModProvider {
@@ -855,9 +887,18 @@ class HangarProvider extends ModProvider {
       selected = versions[0];
     }
 
+    const getPlatformUrl = (version, platform) => {
+      const entry = version?.downloads?.[platform];
+      const direct = String(entry?.downloadUrl || '').trim();
+      if (direct) return direct;
+      const external = String(entry?.externalUrl || '').trim();
+      if (external) return external;
+      return '';
+    };
+
     const platformOrder = typeHints.length > 0 ? typeHints : ['PAPER', 'SPIGOT', 'VELOCITY', 'WATERFALL'];
     for (const platform of platformOrder) {
-      const url = selected.downloads?.[platform]?.downloadUrl;
+      const url = getPlatformUrl(selected, platform);
       if (url) return url;
     }
 
@@ -866,7 +907,7 @@ class HangarProvider extends ModProvider {
       // but scan all returned versions before failing.
       for (const version of versions) {
         for (const platform of ['VELOCITY', 'WATERFALL']) {
-          const url = version.downloads?.[platform]?.downloadUrl;
+          const url = getPlatformUrl(version, platform);
           if (url) return url;
         }
       }
@@ -875,7 +916,7 @@ class HangarProvider extends ModProvider {
 
     for (const version of versions) {
       for (const platform of ['PAPER', 'SPIGOT', 'VELOCITY', 'WATERFALL']) {
-        const url = version.downloads?.[platform]?.downloadUrl;
+        const url = getPlatformUrl(version, platform);
         if (url) return url;
       }
     }
@@ -890,6 +931,29 @@ class SpigotProvider extends ModProvider {
     this.baseUrl = 'https://api.spiget.org/v2';
   }
 
+  normalizeAuthorName(value) {
+    return normalizeSearchValue(value).replace(/\s+/g, '');
+  }
+
+  async resolveAuthorByName(name) {
+    const query = String(name || '').trim();
+    if (!query) return null;
+
+    const response = await axios.get(`${this.baseUrl}/search/authors/${encodeURIComponent(query)}`, {
+      params: { size: 25, page: 1 }
+    });
+
+    const rows = Array.isArray(response.data) ? response.data : [];
+    if (rows.length === 0) return null;
+
+    const wanted = this.normalizeAuthorName(query);
+    const exact = rows.find((entry) => this.normalizeAuthorName(entry?.name) === wanted);
+    if (exact) return exact;
+
+    if (rows.length === 1) return rows[0];
+    return null;
+  }
+
   toItem(resource = {}) {
     const id = String(resource?.id || '').trim();
     if (!id) return null;
@@ -898,18 +962,20 @@ class SpigotProvider extends ModProvider {
       ? (/^https?:\/\//i.test(iconUrl) ? iconUrl : `https://www.spigotmc.org/${iconUrl.replace(/^\/+/, '')}`)
       : '';
     const authorId = resource?.author?.id;
+    const authorName = String(resource?.author?.name || '').trim();
     return {
       id,
       name: String(resource?.name || `Spigot Resource #${id}`).trim(),
       summary: String(resource?.tag || '').trim() || 'No description provided.',
-      author: authorId ? `Author #${authorId}` : 'Unknown',
+      author: authorName || (authorId ? `Author #${authorId}` : 'Unknown'),
       logo,
       websiteUrl: `https://www.spigotmc.org/resources/${id}/`,
       latestFileId: resource?.version?.id ? String(resource.version.id) : null,
       latestFileName: sanitizeFileName(`${resource?.name || `spigot-${id}`}.jar`),
       provider: 'spigot',
       metadata: {
-        premium: Boolean(resource?.premium)
+        premium: Boolean(resource?.premium),
+        authorId: authorId ? String(authorId) : null
       }
     };
   }
@@ -919,6 +985,41 @@ class SpigotProvider extends ModProvider {
     const parsedQuery = parseSearchQuery(query);
     const textQuery = String(parsedQuery.textQuery || parsedQuery.raw || '').trim();
     const useSearch = Boolean(textQuery);
+    const searchQueries = this.buildSearchQueries(textQuery);
+
+    const authorLookupText = String(parsedQuery.authorQuery || textQuery).trim();
+    if (authorLookupText) {
+      const authorMatch = await this.resolveAuthorByName(authorLookupText).catch(() => null);
+      if (authorMatch?.id) {
+        const authorResponse = await axios.get(`${this.baseUrl}/authors/${encodeURIComponent(authorMatch.id)}/resources`, {
+          params: {
+            size: pageSize,
+            page
+          }
+        });
+
+        const authorRows = Array.isArray(authorResponse.data) ? authorResponse.data : [];
+        const authorItems = authorRows
+          .filter((resource) => resource && resource.premium !== true)
+          .map((resource) => {
+            const mapped = this.toItem(resource);
+            if (!mapped) return null;
+            return {
+              ...mapped,
+              author: String(authorMatch.name || mapped.author || '').trim() || mapped.author
+            };
+          })
+          .filter(Boolean);
+
+        return {
+          items: authorItems,
+          page,
+          pageSize,
+          total: offset + authorItems.length + (authorRows.length === pageSize ? 1 : 0),
+          hasMore: authorRows.length === pageSize
+        };
+      }
+    }
 
     // For query-based search we scan upstream pages to fill the requested page with free-only items.
     const sourcePageSize = Math.min(Math.max(pageSize, 20), 50);
@@ -926,14 +1027,17 @@ class SpigotProvider extends ModProvider {
     let filteredSeen = 0;
     let exhausted = false;
     let cycle = 0;
-    const maxCycles = 12;
+    const maxCycles = 40;
     const wantedEnd = offset + pageSize;
     const items = [];
+    const seenIds = new Set();
+    let queryIndex = 0;
 
     while (!exhausted && filteredSeen < wantedEnd && cycle < maxCycles) {
       cycle += 1;
+      const activeQuery = useSearch ? searchQueries[queryIndex] : '';
       const response = useSearch
-        ? await axios.get(`${this.baseUrl}/search/resources/${encodeURIComponent(textQuery)}`, {
+        ? await axios.get(`${this.baseUrl}/search/resources/${encodeURIComponent(activeQuery)}`, {
           params: {
             size: sourcePageSize,
             page: sourcePage
@@ -947,15 +1051,23 @@ class SpigotProvider extends ModProvider {
         });
       const rows = Array.isArray(response.data) ? response.data : [];
       if (rows.length === 0) {
+        if (useSearch && queryIndex + 1 < searchQueries.length) {
+          queryIndex += 1;
+          sourcePage = 1;
+          continue;
+        }
         exhausted = true;
         break;
       }
 
       for (const resource of rows) {
-        if (!resource || resource.existenceStatus !== 1) continue;
+        if (!resource) continue;
+        if (resource.existenceStatus !== undefined && resource.existenceStatus !== 1) continue;
         if (resource.premium === true) continue;
         const mapped = this.toItem(resource);
         if (!mapped) continue;
+        if (seenIds.has(mapped.id)) continue;
+        seenIds.add(mapped.id);
         if (!matchesSearchQuery(mapped, parsedQuery)) continue;
         if (filteredSeen >= offset && items.length < pageSize) {
           items.push(mapped);
@@ -964,9 +1076,50 @@ class SpigotProvider extends ModProvider {
       }
 
       if (rows.length < sourcePageSize) {
+        if (useSearch && queryIndex + 1 < searchQueries.length) {
+          queryIndex += 1;
+          sourcePage = 1;
+          continue;
+        }
         exhausted = true;
       }
       sourcePage += 1;
+    }
+
+    if (useSearch && items.length < pageSize) {
+      let fallbackPage = 1;
+      let fallbackCycle = 0;
+      const maxFallbackCycles = 120;
+      const fallbackPageSize = 100;
+      while (items.length < pageSize && fallbackCycle < maxFallbackCycles) {
+        fallbackCycle += 1;
+        const fallbackResponse = await axios.get(`${this.baseUrl}/resources/free`, {
+          params: {
+            size: fallbackPageSize,
+            page: fallbackPage
+          }
+        });
+        const fallbackRows = Array.isArray(fallbackResponse.data) ? fallbackResponse.data : [];
+        if (fallbackRows.length === 0) break;
+
+        for (const resource of fallbackRows) {
+          if (!resource) continue;
+          if (resource.existenceStatus !== undefined && resource.existenceStatus !== 1) continue;
+          if (resource.premium === true) continue;
+          const mapped = this.toItem(resource);
+          if (!mapped) continue;
+          if (seenIds.has(mapped.id)) continue;
+          seenIds.add(mapped.id);
+          if (!matchesSearchQuery(mapped, parsedQuery)) continue;
+          if (filteredSeen >= offset && items.length < pageSize) {
+            items.push(mapped);
+          }
+          filteredSeen += 1;
+        }
+
+        if (fallbackRows.length < fallbackPageSize) break;
+        fallbackPage += 1;
+      }
     }
 
     const hasMore = !exhausted && filteredSeen >= wantedEnd;
@@ -978,6 +1131,28 @@ class SpigotProvider extends ModProvider {
       total: inferredTotal,
       hasMore
     };
+  }
+
+  buildSearchQueries(rawQuery) {
+    const base = String(rawQuery || '').trim();
+    if (!base) return [''];
+
+    const cleaned = base.replace(/[^a-zA-Z0-9\s._-]/g, ' ').replace(/\s+/g, ' ').trim();
+    const tokens = cleaned.toLowerCase().split(' ').filter((t) => t.length >= 3);
+
+    const variants = [
+      base,
+      base.replace(/[\[\]\(\)\{\}"'`]/g, ' ').replace(/\s+/g, ' ').trim(),
+      cleaned,
+      base.replace(/[\[\]]/g, '').trim()
+    ];
+
+    if (tokens.length > 0) {
+      variants.push(tokens.join(' '));
+      variants.push(tokens[0]);
+    }
+
+    return variants.filter((q, idx, arr) => q && arr.indexOf(q) === idx);
   }
 
   async getDownloadUrl(modId) {
@@ -1146,6 +1321,9 @@ class GitHubGistProvider extends ModProvider {
     });
     const websiteUrl = websiteInterpolated.trim() || null;
 
+    const inferredFromUrl = extractFileNameFromUrl(downloadUrl);
+    const explicitLatestName = String(entry?.latestFileName || '').trim();
+
     return {
       id: stableId,
       name,
@@ -1156,8 +1334,8 @@ class GitHubGistProvider extends ModProvider {
       downloadUrl,
       latestFileId: null,
       latestFileName: this.resourceType === 'datapack'
-        ? coerceDatapackFilename(entry?.latestFileName || `${name}.zip`, name)
-        : sanitizeFileName(entry?.latestFileName || `${name}.jar`),
+        ? coerceDatapackFilename(explicitLatestName || inferredFromUrl || `${name}.zip`, name)
+        : sanitizeFileName(explicitLatestName || inferredFromUrl || `${name}.jar`),
       provider: providerTag,
       providerName: this.name,
       metadata: {

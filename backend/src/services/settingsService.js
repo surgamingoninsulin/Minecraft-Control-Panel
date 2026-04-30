@@ -7,6 +7,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DATA_DIR = path.join(__dirname, '../../data');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
+const SERVER_ICON_SOURCE = path.resolve(__dirname, '../../../frontend/public/static/images/server-icon.png');
 const DEFAULT_GITHUB_GIST_URL = 'https://gist.github.com/surgamingoninsulin/2b4d90991a5a5a025f69cce2282f67b7';
 
 function safeString(value, fallback = '') {
@@ -528,8 +529,21 @@ class SettingsService {
 
     this.settings = settingsToSave;
     await fs.writeFile(SETTINGS_FILE, JSON.stringify(this.settings, null, 2));
+    await this.ensureServerIconInRoot(this.settings.serverPath);
 
     return this.settings;
+  }
+
+  async ensureServerIconInRoot(serverPath) {
+    const targetRoot = safeString(serverPath, '').trim();
+    if (!targetRoot) return;
+    const targetIconPath = path.join(targetRoot, 'server-icon.png');
+    try {
+      await fs.mkdir(targetRoot, { recursive: true });
+      await fs.copyFile(SERVER_ICON_SOURCE, targetIconPath);
+    } catch {
+      // Never block settings persistence if icon copy fails.
+    }
   }
 
   async get() {

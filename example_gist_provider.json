@@ -1,27 +1,6 @@
 {
   "datapacks": [
-    {
-      "id": "woodwork-data",
-      "name": "Woodwork",
-      "author": "SurGamingOnInsulin",
-      "minecraftversion": "1.21.4",
-      "version": "1.0.0",
-      "image": "https://raw.githubusercontent.com/surgamingoninsulin/I-LLAMA_Datapack_Collections/refs/heads/main/Collections_ART/Woodwork.png",
-      "directDownloadUrl": "https://github.com/surgamingoninsulin/I-LLAMA_Datapack_Collections/raw/refs/heads/main/Collections/I-LLAMA%20Datapack%20Collections%20-%20Woodwork.zip",
-      "description": "Woodworks Datapack for 1.21.4 you can use the stonecutter to cut down wooden stuff.",
-      "websiteUrl": "https://github.com/surgamingoninsulin/I-LLAMA_Datapack_Collections/tree/main"
-    },
-    {
-      "id": "standwitharms-data",
-      "name": "StandWithArms",
-      "author": "GamingOnInsulin",
-      "minecraftversion": "1.19",
-      "version": "1.0.0",
-      "image": "https://raw.githubusercontent.com/gamingoninsulin/StandWithArms/refs/heads/release/pack.png",
-      "directDownloadUrl": "https://github.com/gamingoninsulin/StandWithArms/releases/download/release/StansWithArms-1.19.X-1.0.zip",
-      "description": "This is datapck for mincraft 1.19 that enables armor stands with arms when placed down",
-      "websiteUrl": "https://github.com/gamingoninsulin/StandWithArms"
-    }
+    {}
   ],
   "plugins": [
     {
@@ -31,9 +10,9 @@
       "minecraftVersion": "1.21.11",
       "version": "0.37.0",
       "image": "https://avatars.githubusercontent.com/u/195216170?s=200&v=4",
-      "directDownloadUrl": "https://github.com/pylonmc/pylon/releases/download/${version}/pylon-${version}.jar",
-      "description": "An upcoming Minecraft Java technology plugin that will hugely expand vanilla gameplay with new content: electricity, diesel machines, new fluids and fluid pipes, logistics, and much, much more!.",
-      "websiteUrl": "https://github.com/PolyMC/rebar"
+      "directDownloadUrl": "https://github.com/pylonmc/rebar/releases/download/0.37.0/rebar-0.37.0.jar",
+      "description": "A modern mod-like framework for Paper.",
+      "websiteUrl": "https://github.com/PylonMC/rebar"
     },
     {
       "id": "pylon-plugin",
@@ -42,9 +21,9 @@
       "minecraftVersion": "1.21.11",
       "version": "0.34.0",
       "image": "https://avatars.githubusercontent.com/u/195216170?s=200&v=4",
-      "directDownloadUrl": "https://github.com/pylonmc/rebar/releases/download/${version}/rebar-${version}.jar",
-      "description": "A modern mod-like framework for Paper.",
-      "websiteUrl": "https://github.com/PolyMC/rebar",
+      "directDownloadUrl": "https://github.com/pylonmc/pylon/releases/download/0.34.0/pylon-0.34.0.jar",
+      "description": "An upcoming Minecraft Java technology plugin that will hugely expand vanilla gameplay with new content: electricity, diesel machines, new fluids and fluid pipes, logistics, and much, much more!",
+      "websiteUrl": "https://github.com/PylonMC/Pylon",
       "dependencies": [
         {
           "id": "rebar-plugin",
@@ -53,61 +32,38 @@
           "minecraftVersion": "1.21.11",
           "version": "0.37.0",
           "image": "https://avatars.githubusercontent.com/u/195216170?s=200&v=4",
-          "directDownloadUrl": "https://github.com/pylonmc/pylon/releases/download/${version}/pylon-${version}.jar",
-          "description": "An upcoming Minecraft Java technology plugin that will hugely expand vanilla gameplay with new content: electricity, diesel machines, new fluids and fluid pipes, logistics, and much, much more!.",
-          "websiteUrl": "https://github.com/PolyMC/rebar"
+          "directDownloadUrl": "https://github.com/pylonmc/rebar/releases/download/0.37.0/rebar-0.37.0.jar",
+          "description": "A modern mod-like framework for Paper.",
+          "websiteUrl": "https://github.com/PylonMC/rebar"
+        }
+      ]
+    },
+    {
+      "id": "exoticgarden-plugin",
+      "name": "ExoticGarden",
+      "author": "Slimefun-Addon_comunity",
+      "minecraftVersion": "1.21.11",
+      "version": "78",
+      "image": "https://avatars.githubusercontent.com/u/75045809?s=48&v=4",
+      "directDownloadUrl": "https://thebusybiscuit.github.io/builds/TheBusyBiscuit/ExoticGarden/master/ExoticGarden-${version}.jar",
+      "description": "A Slimefun 4 Addon that adds new plants and various new food items",
+      "websiteUrl": "https://github.com/Slimefun-Addon-Community/ExoticGarden",
+      "dependencies": [
+        {
+          "id": "slimefununited-plugin",
+          "name": "Slimefun United",
+          "author": "womzil",
+          "minecraftVersion": "1.21.11",
+          "version": "4.10-alpha-19+050decd",
+          "image": "https://avatars.githubusercontent.com/u/253325749?s=48&v=4",
+          "directDownloadUrl": "https://hangarcdn.papermc.io/plugins/Slimefun-United/Slimefun-United/versions/4.10-alpha-19%2B050decd/PAPER/slimefun-united-4.10-alpha%2B050decd.jar",
+          "description": "A modern and organised continuation of Slimefun’s legacy. Slimefun United transforms your server into a modpack-like experience with backpacks, jetpacks, reactors, electricity, automation and countless new systems.",
+          "websiteUrl": "https://github.com/Slimefun-United/Slimefun-United"
         }
       ]
     }
   ],
   "mods": [
-    {
-      "id": "resourcescannermc-mod",
-      "name": "Resource Scanner MC",
-      "author": "mzdun",
-      "type": "fabric",
-      "minecraftversion": "1.21.4",
-      "version": "0.5.3",
-      "image": "https://avatars.githubusercontent.com/u/3595392?s=48&v=4",
-      "directDownloadUrl": "https://github.com/mzdun/resource-scanner-mc/releases/download/v${version}/resource-scanner-${version}+${minecraftversion}-fabric.jar",
-      "description": "Minecraft mod, which locates coal, iron, diamonds and netherite",
-      "websiteUrl": "https://github.com/mzdun/resource-scanner-mc"
-    },
-    {
-      "id": "BetterThanCoal-mod",
-      "name": "BetterThanCoal",
-      "author": "CapinolDev",
-      "type": "forge",
-      "minecraftversion": "1.21",
-      "version": "1.0.1",
-      "image": "https://avatars.githubusercontent.com/u/195469172?s=48&v=4",
-      "directDownloadUrl": "https://github.com/CapinolDev/BetterThanCoal/releases/download/v.${version}/betterthancoal-${version}.jar",
-      "description": "A minecraft mod that i am working on.",
-      "websiteUrl": "https://github.com/CapinolDev/BetterThanCoal"
-    },
-    {
-      "id": "FabricBedrockMiner-mod",
-      "name": "Fabric-Bedrock-Miner",
-      "author": "LXYan2333",
-      "type": "fabric",
-      "minecraftversion": "1.19.4",
-      "version": "1.0.1",
-      "image": "https://avatars.githubusercontent.com/u/15712263?s=48&v=4",
-      "directDownloadUrl": "https://github.com/LXYan2333/Fabric-Bedrock-Miner/releases/download/${version}/bedrock-miner-${version}.jar",
-      "description": "A fabric client mod to mine bedrock!",
-      "websiteUrl": "https://github.com/LXYan2333/Fabric-Bedrock-Miner"
-    },
-    {
-      "id": "create-mod",
-      "name": "Create",
-      "author": "Creators-of-Create",
-      "type": "neoforge",
-      "minecraftversion": "1.21.1",
-      "version": "6.0.10",
-      "image": "https://avatars.githubusercontent.com/u/57542873?s=48&v=4",
-      "directDownloadUrl": "https://cdn.modrinth.com/data/LNytGWDc/versions/UjX6dr61/create-${minecraftversion}-${version}.jar",
-      "description": "Building Tools and Aesthetic Technology",
-      "websiteUrl": "https://github.com/Creators-of-Create/Create"
-    }
+    {}
   ]
 }
