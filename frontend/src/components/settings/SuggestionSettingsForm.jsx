@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { PANEL_VERSION } from '../../config';
 import * as settingsApi from '../../services/settingsApi';
 
 function buildTemplate(category) {
@@ -11,7 +12,7 @@ function buildTemplate(category) {
         name: entryName,
         author: 'Example Author',
         minecraftVersion: '1.21.11',
-        version: '1.0.0',
+        version: PANEL_VERSION,
         image: 'https://example.com/logo.png',
         directDownloadUrl: 'https://example.com/download.jar',
         description: 'Example description',

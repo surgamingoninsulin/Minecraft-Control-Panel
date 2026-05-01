@@ -79,8 +79,8 @@ Else
 End If
 
 ' Open the site after a short startup delay.
-LogMessage "Waiting 6000ms before opening browser."
-WScript.Sleep 6000
+LogMessage "Waiting 8000ms before opening browser."
+WScript.Sleep 8000
 shell.Run siteUrl, 1, False
 LogMessage "Requested browser open: " & siteUrl
 

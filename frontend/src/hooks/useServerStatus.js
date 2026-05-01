@@ -1,6 +1,7 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { serverAPI } from '../services/api';
 import socketService from '../services/socket';
+import { PANEL_VERSION } from '../config';
 
 export function useServerStatus() {
   const [status, setStatus] = useState('offline');
@@ -11,7 +12,7 @@ export function useServerStatus() {
     memory: 0,
     tps: 20.0,
     players: { online: 0, max: 20 },
-    version: 'Minecraft 1.0.0',
+    version: `Minecraft Panel ${PANEL_VERSION}`,
     worldSize: '0 MB',
     playersOnline: 0,
     playersMax: 20
@@ -67,4 +68,3 @@ export function useServerStatus() {
     players: stats.players
   };
 }
-
