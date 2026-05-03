@@ -9,8 +9,11 @@ export function useServerStatus() {
   const [stats, setStats] = useState({
     uptime: '0d 00h 00m 00s',
     cpu: 0,
+    gpu: null,
     memory: 0,
-    tps: 20.0,
+    memoryPercent: 0,
+    systemMemoryPercent: 0,
+    tps: null,
     players: { online: 0, max: 20 },
     version: `Minecraft Panel ${PANEL_VERSION}`,
     worldSize: '0 MB',

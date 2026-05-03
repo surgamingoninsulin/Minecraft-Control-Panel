@@ -223,7 +223,7 @@ function ProviderSourcesSettingsForm() {
   return (
     <div className="card">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', gap: '8px', flexWrap: 'wrap' }}>
-        <h2 className="card-title" style={{ margin: 0 }}>Provider Sources</h2>
+        <h2 className="card-title" style={{ margin: 0 }}>Content Providers</h2>
         <div style={{ display: 'flex', gap: '8px' }}>
           <button className="btn btn-secondary" onClick={() => setIsAddProviderModalOpen(true)} disabled={saving}>
             <Plus size={16} /> Add Provider
@@ -235,7 +235,7 @@ function ProviderSourcesSettingsForm() {
       {message && <div className="status-badge status-online" style={{ display: 'block', marginBottom: '10px' }}>{message}</div>}
 
       <div className="form-group card" style={{ margin: 0 }}>
-        <label>github Built-in Gist URL</label>
+        <label>Built-in Content Gist URL</label>
         <input
           type="text"
           value={providerSettings.github?.gistUrl || ''}
@@ -248,7 +248,7 @@ function ProviderSourcesSettingsForm() {
       </div>
 
       <div style={{ marginTop: '16px' }}>
-        <h3 style={{ marginTop: 0 }}>Community Providers</h3>
+        <h3 style={{ marginTop: 0 }}>Community Content Providers</h3>
         {providerSettings.communityProviders.length === 0 ? (
           <p style={{ color: 'var(--text-secondary)', margin: 0 }}>
             No community providers added yet.
@@ -296,7 +296,7 @@ function ProviderSourcesSettingsForm() {
       </div>
 
       {isAddProviderModalOpen && (
-        <div style={{
+        <div className="modal-overlay" style={{
           position: 'fixed',
           inset: 0,
           background: 'rgba(0,0,0,0.65)',

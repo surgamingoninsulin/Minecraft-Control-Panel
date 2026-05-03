@@ -169,7 +169,17 @@ function EmptySlotCard({ label }) {
     );
 }
 
-function PluginsPage() {
+function PluginsPage({ resourceType = 'plugin' }) {
+    const normalizedResourceType = String(resourceType || 'plugin').toLowerCase() === 'mod' ? 'mod' : 'plugin';
+    const isModsPage = normalizedResourceType === 'mod';
+    const resourceLabel = isModsPage ? 'mods' : 'plugins';
+    const resourceLabelTitle = isModsPage ? 'Mods' : 'Plugins';
+    const browseLabel = isModsPage ? 'Browse Mods' : 'Browse Plugins';
+    const disabledForVanillaMessage = isModsPage ? 'Mods Disabled for Vanilla' : 'Plugins Disabled for Vanilla';
+    const disabledForVanillaBody = isModsPage
+        ? 'Vanilla servers do not support mods in this panel mode. Change server type to a modded type in Settings.'
+        : 'Vanilla servers do not support plugins in this panel mode. Change server type to a plugin server type in Settings.';
+
     const dialog = useDialog();
     const [activeTab, setActiveTab] = useState('installed'); // installed | browse
 
@@ -220,7 +230,7 @@ function PluginsPage() {
 
     const loadProviders = useCallback(async (serverType) => {
         try {
-            const response = await pluginAPI.providers({ serverType });
+            const response = await pluginAPI.providers({ serverType, resourceType: normalizedResourceType });
             const names = Array.isArray(response.data?.providers) ? response.data.providers : [];
             setProviders(names);
             setProvider((current) => {
@@ -258,7 +268,7 @@ function PluginsPage() {
     const loadLocalPlugins = useCallback(async () => {
         setLoadingLocal(true);
         try {
-            const response = await pluginAPI.list();
+            const response = await pluginAPI.list(normalizedResourceType);
             setLocalPlugins(response.data);
             setInstalledPage(1);
         } catch (err) {
@@ -266,7 +276,7 @@ function PluginsPage() {
         } finally {
             setLoadingLocal(false);
         }
-    }, []);
+    }, [normalizedResourceType]);
 
     useEffect(() => {
         if (activeTab === 'installed') {
@@ -275,10 +285,10 @@ function PluginsPage() {
     }, [activeTab, loadLocalPlugins]);
 
     const handleDelete = async (name) => {
-        const confirmed = await dialog.showConfirm(`Delete mod '${name}'?`, "Delete Mod");
+        const confirmed = await dialog.showConfirm(`Delete ${isModsPage ? 'mod' : 'plugin'} '${name}'?`, `Delete ${isModsPage ? 'Mod' : 'Plugin'}`);
         if (!confirmed) return;
         try {
-            await pluginAPI.delete(name);
+            await pluginAPI.delete(name, normalizedResourceType);
             loadLocalPlugins();
         } catch (err) {
             dialog.showAlert("Failed to delete: " + err.message);
@@ -300,7 +310,7 @@ function PluginsPage() {
                 continue;
             }
             try {
-                await pluginAPI.upload(file);
+                await pluginAPI.upload(file, normalizedResourceType);
             } catch (err) {
                 console.error(err);
                 dialog.showAlert(`Failed to upload ${file.name}`);
@@ -350,7 +360,8 @@ function PluginsPage() {
                 page: safeTargetPage,
                 pageSize: searchPageSize,
                 serverType: searchFilters.serverType,
-                serverVersion: searchFilters.serverVersion
+                serverVersion: searchFilters.serverVersion,
+                resourceType: normalizedResourceType
             });
 
             if (latestSearchRequestRef.current !== requestId) {
@@ -376,7 +387,8 @@ function PluginsPage() {
         if (!downloadUrl) {
             const res = await pluginAPI.getDownloadUrl(provider, mod.id, mod.latestFileId, {
                 serverType: searchFilters.serverType,
-                serverVersion: searchFilters.serverVersion
+                serverVersion: searchFilters.serverVersion,
+                resourceType: normalizedResourceType
             });
             if (res.data.url) downloadUrl = res.data.url;
         }
@@ -397,7 +409,7 @@ function PluginsPage() {
             providerName: mod.providerName || provider || '',
             serverType: searchFilters.serverType,
             serverVersion: searchFilters.serverVersion,
-            resourceType: serverMode === 'modded' ? 'mod' : 'plugin',
+            resourceType: normalizedResourceType,
             dependencies: depList
         };
 
@@ -433,7 +445,8 @@ function PluginsPage() {
             page: 1,
             pageSize: 25,
             serverType: searchFilters.serverType,
-            serverVersion: searchFilters.serverVersion
+            serverVersion: searchFilters.serverVersion,
+            resourceType: normalizedResourceType
         });
         const rows = Array.isArray(response.data?.items) ? response.data.items : (Array.isArray(response.data) ? response.data : []);
         return rows.find((row) => String(row?.id || '') === depId)
@@ -454,7 +467,7 @@ function PluginsPage() {
 
         for (let i = 0; i < attempts; i += 1) {
             try {
-                const response = await pluginAPI.list();
+                const response = await pluginAPI.list(normalizedResourceType);
                 const installed = Array.isArray(response.data) ? response.data : [];
                 const found = installed.some((item) => {
                     const itemId = String(item?.modId || '').trim().toLowerCase();
@@ -568,7 +581,6 @@ function PluginsPage() {
     const installedStart = (installedPage - 1) * installedPageSize;
     const pagedLocalPlugins = localPlugins.slice(installedStart, installedStart + installedPageSize);
     const serverMode = getServerMode(searchFilters.serverType);
-    const resourceLabel = serverMode === 'modded' ? 'mods' : 'plugins';
     const installedCards = pagedLocalPlugins;
     const searchCards = searchResults.length > 0 ? padToLength(searchResults, searchPageSize) : [];
 
@@ -579,8 +591,8 @@ function PluginsPage() {
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px'
             }}>
                 <div>
-                    <h1 className="page-title">Mods/Plugins Manager</h1>
-                    <p className="page-subtitle">Manage your server's mods and plugins</p>
+                    <h1 className="page-title">{resourceLabelTitle} Manager</h1>
+                    <p className="page-subtitle">Manage your server's {resourceLabel}</p>
                 </div>
 
                 {/* Tabs */}
@@ -600,7 +612,7 @@ function PluginsPage() {
                         style={activeTab !== 'browse' ? { background: 'transparent', border: 'none', color: 'var(--text-secondary)' } : {}}
                         onClick={() => setActiveTab('browse')}
                     >
-                        Browse Mods/Plugins
+                        {browseLabel}
                     </button>
                 </div>
             </div>
@@ -632,7 +644,7 @@ function PluginsPage() {
                             <div style={{ display: 'flex', gap: '12px', alignItems: 'center', color: 'var(--text-secondary)' }}>
                                 <Package size={24} />
                                 <span>
-                                    <strong>{localPlugins.length}</strong> mods installed
+                                    <strong>{localPlugins.length}</strong> {resourceLabel} installed
                                 </span>
                             </div>
                             <div>
@@ -731,7 +743,7 @@ function PluginsPage() {
                         </div>
                         {localPlugins.length === 0 && !loadingLocal && (
                             <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-                                No mods installed. Upload one or browse providers.
+                                No {resourceLabel} installed. Upload one or browse providers.
                             </div>
                         )}
                         {localPlugins.length > installedPageSize && (
@@ -761,9 +773,9 @@ function PluginsPage() {
                     <>
                         {serverMode === 'vanilla' ? (
                             <div className="card" style={{ padding: '24px', marginBottom: '20px' }}>
-                                <h3 style={{ marginBottom: '8px' }}>Mods/Plugins Disabled for Vanilla</h3>
+                                <h3 style={{ marginBottom: '8px' }}>{disabledForVanillaMessage}</h3>
                                 <p style={{ color: 'var(--text-secondary)', margin: 0 }}>
-                                    Vanilla servers do not support mods or plugins in this panel mode. Change server type to a plugin or modded type in Settings.
+                                    {disabledForVanillaBody}
                                 </p>
                             </div>
                         ) : (
@@ -957,7 +969,7 @@ function PluginsPage() {
             </div>
 
             {dependencyModal.open && (
-                <div style={{
+                <div className="modal-overlay" style={{
                     position: 'fixed',
                     inset: 0,
                     zIndex: 1100,

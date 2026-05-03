@@ -66,7 +66,14 @@ function SetupPage({ serverResetMode = false }) {
     const [jarFiles, setJarFiles] = useState([]);
     const [jarLoading, setJarLoading] = useState(false);
     const [browseLoading, setBrowseLoading] = useState(false);
+    const [browseZipLoading, setBrowseZipLoading] = useState(false);
+    const [importingSource, setImportingSource] = useState(false);
+    const [manualImport, setManualImport] = useState({
+        sourceType: '',
+        sourcePath: ''
+    });
     const { setup } = useAuth();
+    const usesSpigotConfigRestart = ['spigot', 'paper', 'purpur'].includes(String(settings.serverType || '').toLowerCase());
 
     useEffect(() => {
         if (!serverResetMode) {
@@ -230,6 +237,73 @@ function SetupPage({ serverResetMode = false }) {
         }
     };
 
+    const browseForSourceFolder = async () => {
+        setBrowseLoading(true);
+        try {
+            const response = await axios.get(`${API_URL}/auth/browse-folder`, {
+                timeout: 30000
+            });
+            const pickedPath = response.data?.path || '';
+            if (pickedPath) {
+                setManualImport({
+                    sourceType: 'folder',
+                    sourcePath: pickedPath
+                });
+            }
+        } catch (err) {
+            if (err.code === 'ECONNABORTED') {
+                setError('Folder picker timed out. Try again, or paste the path manually.');
+            } else {
+                setError(err.response?.data?.error || 'Failed to open source folder picker');
+            }
+        } finally {
+            setBrowseLoading(false);
+        }
+    };
+
+    const browseForServerZip = async () => {
+        setBrowseZipLoading(true);
+        try {
+            const response = await axios.get(`${API_URL}/auth/browse-zip`, {
+                timeout: 30000
+            });
+            const pickedPath = response.data?.path || '';
+            if (pickedPath) {
+                setManualImport({
+                    sourceType: 'zip',
+                    sourcePath: pickedPath
+                });
+            }
+        } catch (err) {
+            if (err.code === 'ECONNABORTED') {
+                setError('ZIP picker timed out. Try again, or paste the path manually.');
+            } else {
+                setError(err.response?.data?.error || 'Failed to open ZIP picker');
+            }
+        } finally {
+            setBrowseZipLoading(false);
+        }
+    };
+
+    const importServerSource = async () => {
+        if (installMode !== 'manual') return;
+        if (!manualImport.sourceType || !manualImport.sourcePath.trim()) return;
+        if (!settings.serverPath.trim()) {
+            throw new Error('Destination server path is required before import.');
+        }
+
+        setImportingSource(true);
+        try {
+            await axios.post(`${API_URL}/auth/import-server-source`, {
+                sourceType: manualImport.sourceType,
+                sourcePath: manualImport.sourcePath.trim(),
+                destinationPath: settings.serverPath.trim()
+            });
+        } finally {
+            setImportingSource(false);
+        }
+    };
+
     const [prerequisites, setPrerequisites] = useState({
         checking: false,
         available: false,
@@ -291,12 +365,21 @@ function SetupPage({ serverResetMode = false }) {
         setLoading(true);
         if (serverResetMode) {
             try {
+                await importServerSource();
                 await settingsAPI.saveSetupPanelSettings(settings);
                 window.location.href = '/';
             } catch (err) {
                 setError(err.response?.data?.error || err.message || 'Failed to save server setup');
                 setLoading(false);
             }
+            return;
+        }
+
+        try {
+            await importServerSource();
+        } catch (err) {
+            setError(err.response?.data?.error || err.message || 'Failed to import selected server source');
+            setLoading(false);
             return;
         }
 
@@ -595,6 +678,38 @@ function SetupPage({ serverResetMode = false }) {
                                 </div>
                             </div>
 
+                            {installMode === 'manual' && (
+                                <div className="form-group">
+                                    <label>Import Existing Server Data (Optional)</label>
+                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                        <button
+                                            type="button"
+                                            className="btn btn-secondary"
+                                            onClick={browseForSourceFolder}
+                                            disabled={browseLoading || browseZipLoading || importingSource}
+                                        >
+                                            {browseLoading ? 'Picking Folder...' : 'Pick Server Folder'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="btn btn-secondary"
+                                            onClick={browseForServerZip}
+                                            disabled={browseLoading || browseZipLoading || importingSource}
+                                        >
+                                            {browseZipLoading ? 'Picking ZIP...' : 'Pick Server ZIP'}
+                                        </button>
+                                    </div>
+                                    {manualImport.sourcePath && (
+                                        <div style={{ marginTop: '8px', color: 'var(--text-secondary)' }}>
+                                            Source selected ({manualImport.sourceType}): {manualImport.sourcePath}
+                                        </div>
+                                    )}
+                                    <small>
+                                        Folder import copies all source contents into destination root. ZIP import copies ZIP to destination root, extracts it there, then deletes the ZIP.
+                                    </small>
+                                </div>
+                            )}
+
                             <div className="form-group">
                                 <label>Server Jar</label>
                                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -719,6 +834,23 @@ function SetupPage({ serverResetMode = false }) {
                                 </div>
                             </div>
 
+                            {usesSpigotConfigRestart && (
+                                <div className="java-status-card" style={{ marginTop: '16px' }}>
+                                    <div className="card-header">
+                                        <AlertCircle size={20} className="text-blue" />
+                                        <h4>Spigot Restart Script Reminder</h4>
+                                    </div>
+                                    <div className="card-body">
+                                        <p style={{ marginBottom: '10px' }}>
+                                            This setup creates <code>restart.bat</code> in your server folder. To use automatic restart-on-crash, update <code>spigot.yml</code>:
+                                        </p>
+                                        <pre>
+                                            <code>{`# from\nrestart-script: ./restart.sh\n\n# to\nrestart-script: restart.bat`}</code>
+                                        </pre>
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Installation Progress UI - shown when installing */}
                             {(installStatus.state !== 'idle' && installStatus.state !== 'finished' && installStatus.state !== 'error') && (
                                 <div className="install-process-card" style={{ marginTop: '20px', background: 'rgba(0,0,0,0.2)', padding: '15px', borderRadius: '8px' }}>
@@ -752,7 +884,7 @@ function SetupPage({ serverResetMode = false }) {
                                     </button>
                                 ) : (
                                     <button onClick={handleSubmit} className="btn btn-primary" disabled={loading || (installMode === 'auto' && installStatus.state !== 'finished')}>
-                                        {loading ? 'Finalizing Setup...' : (installMode === 'manual' ? (serverResetMode ? 'Complete Server Setup' : 'Complete Setup') : (installStatus.state === 'finished' ? (serverResetMode ? 'Complete Server Setup' : 'Complete Setup') : 'Installing...'))}
+                                        {(loading || importingSource) ? 'Finalizing Setup...' : (installMode === 'manual' ? (serverResetMode ? 'Complete Server Setup' : 'Complete Setup') : (installStatus.state === 'finished' ? (serverResetMode ? 'Complete Server Setup' : 'Complete Setup') : 'Installing...'))}
                                         {installStatus.state === 'finished' || installMode === 'manual' ? <CheckCircle2 size={18} /> : (loading ? <Loader2 className="animate-spin" size={18} /> : null)}
                                     </button>
                                 )}

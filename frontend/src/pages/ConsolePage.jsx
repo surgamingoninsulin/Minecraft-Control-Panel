@@ -5,6 +5,12 @@ import { useServerStatus } from '../hooks/useServerStatus';
 import socketService from '../services/socket';
 import './ConsolePage.css';
 
+function clampPercent(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(0, Math.min(100, numeric));
+}
+
 function getLogLevelClass(log) {
   const text = String(log || '').toLowerCase();
 
@@ -42,6 +48,25 @@ function ConsolePage() {
   const sawStopMarkerRef = useRef(false);
   const startMarkerPatternRef = useRef(/Starting org\.bukkit\.craftbukkit\.Main/i);
   const stopMarkerPatternRef = useRef(/Server stopped with code 0/i);
+
+  const hasRamPercent = Number.isFinite(Number(stats.memoryPercent));
+  const ramPercent = hasRamPercent ? clampPercent(stats.memoryPercent) : 0;
+  const cpuPercent = clampPercent(stats.cpu ?? 0);
+  const hasGpu = Number.isFinite(Number(stats.gpu ?? stats.gpuUsage));
+  const gpuPercent = hasGpu ? clampPercent(stats.gpu ?? stats.gpuUsage) : 0;
+  const hasSystemMemoryPercent = Number.isFinite(Number(stats.systemMemoryPercent));
+  const memoryPercent = hasSystemMemoryPercent ? clampPercent(stats.systemMemoryPercent) : 0;
+  const tpsNumeric = Number(stats.tps);
+  const hasTps = Number.isFinite(tpsNumeric);
+  const tpsPercent = hasTps ? clampPercent((tpsNumeric / 20) * 100) : 0;
+
+  const gauges = [
+    { key: 'ram', label: 'RAM', valueLabel: hasRamPercent ? `${Math.round(ramPercent)}%` : 'N/A', percent: ramPercent, unavailable: !hasRamPercent },
+    { key: 'cpu', label: 'CPU', valueLabel: `${Math.round(cpuPercent)}%`, percent: cpuPercent },
+    { key: 'gpu', label: 'GPU', valueLabel: hasGpu ? `${Math.round(gpuPercent)}%` : 'N/A', percent: gpuPercent, unavailable: !hasGpu },
+    { key: 'memory', label: 'Memory', valueLabel: hasSystemMemoryPercent ? `${Math.round(memoryPercent)}%` : 'N/A', percent: memoryPercent, unavailable: !hasSystemMemoryPercent },
+    { key: 'tps', label: 'TPS', valueLabel: hasTps ? tpsNumeric.toFixed(1) : 'N/A', percent: tpsPercent, unavailable: !hasTps }
+  ];
 
   useEffect(() => {
     socketService.connect();
@@ -136,6 +161,26 @@ function ConsolePage() {
 
   return (
     <div className="console-page fade-in">
+      <div className="console-gauges card">
+        <div className="console-gauge-row">
+          {gauges.map((gauge) => (
+            <div key={gauge.key} className="console-gauge-tile">
+              <div
+                className={`console-gauge-ring ${gauge.unavailable ? 'unavailable' : ''}`}
+                style={{
+                  background: `conic-gradient(var(--minecraft-green-light) ${gauge.percent * 1.8}deg, var(--bg-tertiary) ${gauge.percent * 1.8}deg 180deg)`
+                }}
+              >
+                <div className="console-gauge-inner">
+                  <span className="console-gauge-value">{gauge.valueLabel}</span>
+                </div>
+              </div>
+              <span className="console-gauge-label">{gauge.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="console-header">
         <h1 className="page-title">Server Console</h1>
         <p className="page-subtitle">Real-time server output and command execution</p>

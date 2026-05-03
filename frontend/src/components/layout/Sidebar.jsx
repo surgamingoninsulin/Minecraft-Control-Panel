@@ -5,6 +5,9 @@ import {
   Terminal,
   FolderOpen,
   Package,
+  Archive,
+  ChevronDown,
+  ChevronRight,
   Settings,
   Users,
   LogOut,
@@ -21,11 +24,22 @@ import { PANEL_VERSION } from '../../config';
 import './Sidebar.css';
 
 function Sidebar() {
+  const MANAGERS_DROPDOWN_STORAGE_KEY = 'sidebar_managers_dropdown_open';
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { showConfirm, showAlert } = useDialog();
   const [serverType, setServerType] = useState('vanilla');
+  const [managersOpen, setManagersOpen] = useState(() => {
+    try {
+      const stored = localStorage.getItem(MANAGERS_DROPDOWN_STORAGE_KEY);
+      if (stored === 'true') return true;
+      if (stored === 'false') return false;
+    } catch {
+      // ignore storage errors and use default
+    }
+    return false;
+  });
 
   useEffect(() => {
     let mounted = true;
@@ -46,6 +60,14 @@ function Sidebar() {
       mounted = false;
     };
   }, [location.pathname]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(MANAGERS_DROPDOWN_STORAGE_KEY, managersOpen ? 'true' : 'false');
+    } catch {
+      // ignore storage errors
+    }
+  }, [managersOpen]);
 
   const handleLogout = async () => {
     const confirmed = await showConfirm(
@@ -75,12 +97,17 @@ function Sidebar() {
     }
   };
 
+  const managerItems = [
+    { path: '/packs', icon: Archive, label: 'Packs' },
+    { path: '/worlds', icon: Globe, label: 'Datapacks' },
+    { path: '/plugins', icon: Package, label: 'Plugins', disabled: serverType === 'vanilla' },
+    { path: '/mods', icon: Package, label: 'Mods', disabled: !['forge', 'fabric', 'neoforge'].includes(serverType) },
+  ];
+
   const menuItems = [
     { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/console', icon: Terminal, label: 'Console' },
     { path: '/files', icon: FolderOpen, label: 'Files' },
-    { path: '/plugins', icon: Package, label: 'Mods/Plugins', disabled: serverType === 'vanilla' },
-    { path: '/worlds', icon: Globe, label: 'Worlds' },
     { path: '/players', icon: Users, label: 'Players' },
   ];
 
@@ -117,6 +144,40 @@ function Sidebar() {
             </Link>
           );
         })}
+
+        <button
+          type="button"
+          className={`nav-item nav-item-button ${managerItems.some((entry) => location.pathname === entry.path) ? 'active' : ''}`}
+          onClick={() => setManagersOpen((prev) => !prev)}
+          aria-expanded={managersOpen ? 'true' : 'false'}
+        >
+          {managersOpen ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
+          <span>Managers</span>
+        </button>
+
+        {managersOpen && (
+          <div className="nav-submenu">
+            {managerItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = location.pathname === item.path;
+              return (
+                <Link
+                  key={item.path}
+                  to={item.disabled ? '#' : item.path}
+                  className={`nav-item nav-subitem ${isActive ? 'active' : ''} ${item.disabled ? 'disabled' : ''}`}
+                  onClick={(e) => {
+                    if (!item.disabled) return;
+                    e.preventDefault();
+                  }}
+                  aria-disabled={item.disabled ? 'true' : 'false'}
+                >
+                  <Icon size={18} />
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        )}
 
         <button
           type="button"

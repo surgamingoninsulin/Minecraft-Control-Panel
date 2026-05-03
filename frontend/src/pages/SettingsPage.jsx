@@ -3,6 +3,7 @@ import PanelSettingsForm from '../components/settings/PanelSettingsForm';
 import ServerSettingsForm from '../components/settings/ServerSettingsForm';
 import ProviderApiSettingsForm from '../components/settings/ProviderApiSettingsForm';
 import ProviderSourcesSettingsForm from '../components/settings/ProviderSourcesSettingsForm';
+import PackProviderSettingsForm from '../components/settings/PackProviderSettingsForm';
 import SuggestionSettingsForm from '../components/settings/SuggestionSettingsForm';
 import JsonFileEditor from '../components/settings/JsonFileEditor';
 import TextFileEditor from '../components/settings/TextFileEditor';
@@ -68,7 +69,7 @@ function SettingsPage() {
                     className={`tab-btn ${activeTab === 'providers' ? 'active' : ''}`}
                     onClick={() => setActiveTab('providers')}
                 >
-                    Provider APIs
+                    API Providers
                 </button>
                 <button
                     className={`tab-btn ${activeTab === 'files' ? 'active' : ''}`}
@@ -91,6 +92,7 @@ function SettingsPage() {
                     <div style={{ display: 'grid', gap: '16px' }}>
                         <ProviderApiSettingsForm />
                         <ProviderSourcesSettingsForm />
+                        <PackProviderSettingsForm />
                     </div>
                 )}
                 {activeTab === 'files' && (

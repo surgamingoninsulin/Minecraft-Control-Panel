@@ -103,6 +103,7 @@ router.post('/reset-setup', async (req, res) => {
           const fullPath = path.join(serverPath, entry.name);
           return fs.rm(fullPath, { recursive: true, force: true });
         }));
+        await settingsService.ensureRestartScriptInRoot(serverPath);
       } catch (err) {
         if (err?.code !== 'ENOENT') {
           throw err;

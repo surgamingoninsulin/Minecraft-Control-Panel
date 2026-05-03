@@ -13,6 +13,13 @@ class PluginService {
     this.registryPath = path.resolve('data/installed_mods.json');
   }
 
+  normalizeResourceType(resourceType = '') {
+    const normalized = String(resourceType || '').trim().toLowerCase();
+    if (normalized === 'mod' || normalized === 'mods') return 'mod';
+    if (normalized === 'plugin' || normalized === 'plugins') return 'plugin';
+    return '';
+  }
+
   async getRegistry() {
     try {
       const data = await fs.readFile(this.registryPath, 'utf8');
@@ -149,15 +156,26 @@ class PluginService {
     return null;
   }
 
-  async getInstallPath() {
+  async getInstallPath(resourceType = '') {
     const settings = await settingsService.get();
     const serverPath = String(settings.serverPath || '').trim();
     const serverType = String(settings.serverType || '').trim().toLowerCase();
-    const preferred = MODDED_SERVER_TYPES.has(serverType)
+    const normalizedResourceType = this.normalizeResourceType(resourceType);
+    const preferred = normalizedResourceType === 'mod'
       ? 'mods'
-      : (PLUGIN_SERVER_TYPES.has(serverType) ? 'plugins' : (settings.pluginInstallDir || 'plugins'));
+      : (normalizedResourceType === 'plugin'
+        ? 'plugins'
+        : (MODDED_SERVER_TYPES.has(serverType)
+          ? 'mods'
+          : (PLUGIN_SERVER_TYPES.has(serverType) ? 'plugins' : (settings.pluginInstallDir || 'plugins'))));
     const primaryPath = path.join(serverPath, preferred);
     const fallbackPath = path.join(serverPath, preferred === 'mods' ? 'plugins' : 'mods');
+    const hasExplicitResourceType = normalizedResourceType === 'mod' || normalizedResourceType === 'plugin';
+
+    if (hasExplicitResourceType) {
+      await fs.mkdir(primaryPath, { recursive: true });
+      return primaryPath;
+    }
 
     try {
       await fs.access(primaryPath);
@@ -173,8 +191,8 @@ class PluginService {
     return primaryPath;
   }
 
-  async listPlugins() {
-    const modsPath = await this.getInstallPath();
+  async listPlugins(resourceType = '') {
+    const modsPath = await this.getInstallPath(resourceType);
     const registry = await this.getRegistry();
     console.log('[PluginService] Listing plugins from:', modsPath);
 
@@ -216,8 +234,8 @@ class PluginService {
     }
   }
 
-  async uploadPlugin(filename, buffer) {
-    const modsPath = await this.getInstallPath();
+  async uploadPlugin(filename, buffer, resourceType = '') {
+    const modsPath = await this.getInstallPath(resourceType);
     const resolvedName = path.basename(String(filename || '').trim());
     if (!resolvedName) throw new Error('Invalid plugin filename');
     const filePath = path.join(modsPath, resolvedName);
@@ -235,8 +253,8 @@ class PluginService {
     return { success: true, name: resolvedName };
   }
 
-  async deletePlugin(filename) {
-    const modsPath = await this.getInstallPath();
+  async deletePlugin(filename, resourceType = '') {
+    const modsPath = await this.getInstallPath(resourceType);
     const filePath = path.join(modsPath, filename);
 
     try {
@@ -268,7 +286,7 @@ class PluginService {
     if (!resolvedName) {
       throw new Error('Dependency download failed: invalid filename');
     }
-    const modsPath = await this.getInstallPath();
+    const modsPath = await this.getInstallPath(metadata?.resourceType || '');
     const filePath = path.join(modsPath, resolvedName);
 
     // If the same modId was previously installed under a different filename

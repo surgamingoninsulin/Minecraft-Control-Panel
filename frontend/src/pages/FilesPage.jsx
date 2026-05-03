@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { fileAPI } from '../services/api';
 import { useDialog } from '../contexts/DialogContext';
 import {
     Folder, File as FileIcon, ArrowLeft, RefreshCw,
-    Plus, Trash2, Upload, X, Save, FileText
+    Plus, Trash2, Upload, X, Save, FileText, ChevronRight, ChevronDown
 } from 'lucide-react';
 import '../styles/global.css';
 
@@ -21,6 +21,25 @@ function FilesPage() {
     const [editingFile, setEditingFile] = useState(null); // { name, path }
     const [editorContent, setEditorContent] = useState('');
     const [saving, setSaving] = useState(false);
+    const [exportModal, setExportModal] = useState({ open: false, state: 'loading', message: '' });
+    const [exportPicker, setExportPicker] = useState({
+        open: false,
+        loading: false,
+        loadingPath: '',
+        tree: {},
+        expanded: {},
+        selected: {}
+    });
+    const exportTreeRef = useRef(null);
+    const updateExportPickerPreserveScroll = (updater) => {
+        const currentScrollTop = exportTreeRef.current ? exportTreeRef.current.scrollTop : 0;
+        setExportPicker(updater);
+        requestAnimationFrame(() => {
+            if (exportTreeRef.current) {
+                exportTreeRef.current.scrollTop = currentScrollTop;
+            }
+        });
+    };
 
     const loadFiles = useCallback(async (path) => {
         setLoading(true);
@@ -124,10 +143,202 @@ function FilesPage() {
         }
     };
 
+    const downloadBlob = (blob, fileName) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    };
+
+    const loadExportDirectory = async (directory = '', keepSelection = true) => {
+        const currentScrollTop = exportTreeRef.current ? exportTreeRef.current.scrollTop : 0;
+        setExportPicker((prev) => ({
+            ...prev,
+            open: true,
+            loading: prev.tree[directory] ? prev.loading : true,
+            loadingPath: directory
+        }));
+        try {
+            const response = await fileAPI.list(directory, { timeout: 60000 });
+            const dirItems = Array.isArray(response.data) ? response.data : [];
+            setExportPicker((prev) => ({
+                ...prev,
+                open: true,
+                loading: false,
+                loadingPath: '',
+                tree: {
+                    ...prev.tree,
+                    [directory]: dirItems
+                },
+                expanded: {
+                    ...prev.expanded,
+                    [directory]: true
+                },
+                selected: keepSelection ? prev.selected : {}
+            }));
+            requestAnimationFrame(() => {
+                if (exportTreeRef.current) {
+                    exportTreeRef.current.scrollTop = currentScrollTop;
+                }
+            });
+        } catch (err) {
+            setExportPicker({ open: false, loading: false, loadingPath: '', tree: {}, expanded: {}, selected: {} });
+            dialog.showAlert(err.response?.data?.error || err.message || 'Failed to load export list', 'Export Error');
+        }
+    };
+
+    const openExportPicker = async () => {
+        setExportPicker({ open: true, loading: true, loadingPath: '', tree: {}, expanded: {}, selected: {} });
+        try {
+            const response = await fileAPI.list('', { timeout: 60000 });
+            const rootItems = Array.isArray(response.data) ? response.data : [];
+            setExportPicker({
+                open: true,
+                loading: false,
+                loadingPath: '',
+                tree: { '': rootItems },
+                expanded: { '': true },
+                selected: {}
+            });
+        } catch (err) {
+            setExportPicker({ open: false, loading: false, loadingPath: '', tree: {}, expanded: {}, selected: {} });
+            dialog.showAlert(err.response?.data?.error || err.message || 'Failed to load export list', 'Export Error');
+        }
+    };
+
+    const handleExportZip = async () => {
+        const includePaths = Object.keys(exportPicker.selected).filter((p) => exportPicker.selected[p]);
+        if (includePaths.length === 0) {
+            dialog.showAlert('Select at least one file or folder to export.', 'Export');
+            return;
+        }
+        setExportPicker({ open: false, loading: false, loadingPath: '', tree: {}, expanded: {}, selected: {} });
+        setExportModal({ open: true, state: 'loading', message: 'Exporting server.zip...' });
+        try {
+            const response = await fileAPI.exportZip(includePaths);
+            downloadBlob(response.data, 'server-exported.zip');
+            setExportModal({ open: true, state: 'success', message: 'Server ZIP export completed successfully.' });
+        } catch (err) {
+            setExportModal({ open: false, state: 'loading', message: '' });
+            dialog.showAlert(err.response?.data?.error || err.message || 'Failed to export ZIP', 'Export Error');
+        }
+    };
+
     // Drag & Drop Handlers
     const onDragOver = (e) => {
         e.preventDefault();
         setIsDragging(true);
+    };
+
+    const toggleFolderExpand = async (relPath) => {
+        const isExpanded = Boolean(exportPicker.expanded[relPath]);
+        if (isExpanded) {
+            updateExportPickerPreserveScroll((prev) => ({
+                ...prev,
+                expanded: {
+                    ...prev.expanded,
+                    [relPath]: false
+                }
+            }));
+            return;
+        }
+        if (!exportPicker.tree[relPath]) {
+            await loadExportDirectory(relPath);
+        } else {
+            updateExportPickerPreserveScroll((prev) => ({
+                ...prev,
+                expanded: {
+                    ...prev.expanded,
+                    [relPath]: true
+                }
+            }));
+        }
+    };
+
+    const getDescendantKeysFromSelected = (basePath, treeState) => {
+        const keys = [];
+        const prefix = `${basePath}/`;
+        Object.keys(treeState || {}).forEach((dirKey) => {
+            if (!dirKey.startsWith(prefix)) return;
+            const items = treeState[dirKey] || [];
+            items.forEach((item) => {
+                const p = dirKey ? `${dirKey}/${item.name}` : item.name;
+                keys.push(p);
+            });
+        });
+        return keys;
+    };
+
+    const hasSelectedAncestor = (relPath, selectedMap) => {
+        const parts = String(relPath || '').split('/').filter(Boolean);
+        let curr = '';
+        for (let i = 0; i < parts.length - 1; i += 1) {
+            curr = curr ? `${curr}/${parts[i]}` : parts[i];
+            if (selectedMap[curr]) return true;
+        }
+        return false;
+    };
+
+    const isPathChecked = (relPath, selectedMap) => {
+        if (selectedMap[relPath]) return true;
+        return hasSelectedAncestor(relPath, selectedMap);
+    };
+
+    const setPathSelection = (relPath, isDirectory, checked) => {
+        updateExportPickerPreserveScroll((prev) => {
+            const nextSelected = { ...prev.selected, [relPath]: checked };
+            if (isDirectory) {
+                const descendants = getDescendantKeysFromSelected(relPath, prev.tree);
+                descendants.forEach((childPath) => {
+                    nextSelected[childPath] = checked;
+                });
+            } else if (!checked) {
+                nextSelected[relPath] = false;
+            }
+            return {
+                ...prev,
+                selected: nextSelected
+            };
+        });
+    };
+
+    const renderExportTree = (directory = '', depth = 0) => {
+        const items = exportPicker.tree[directory] || [];
+        return items.map((item) => {
+            const relPath = directory ? `${directory}/${item.name}` : item.name;
+            const isExpanded = Boolean(exportPicker.expanded[relPath]);
+            return (
+                <div key={relPath}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 2px', paddingLeft: `${depth * 18 + 4}px` }}>
+                        {item.isDirectory ? (
+                            <button
+                                type="button"
+                                onClick={() => toggleFolderExpand(relPath)}
+                                style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: 0, display: 'flex' }}
+                                title={isExpanded ? 'Collapse folder' : 'Expand folder'}
+                            >
+                                {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                            </button>
+                        ) : (
+                            <span style={{ width: 14, display: 'inline-block' }} />
+                        )}
+                        <input
+                            type="checkbox"
+                            checked={isPathChecked(relPath, exportPicker.selected)}
+                            onChange={(e) => setPathSelection(relPath, item.isDirectory, e.target.checked)}
+                        />
+                        <span style={{ color: item.isDirectory ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
+                            {item.isDirectory ? '[Folder]' : '[File]'} {item.name}
+                        </span>
+                    </div>
+                    {item.isDirectory && isExpanded && renderExportTree(relPath, depth + 1)}
+                </div>
+            );
+        });
     };
 
     const onDragLeave = (e) => {
@@ -184,6 +395,9 @@ function FilesPage() {
                     </button>
                     <button onClick={handleCreateFile} className="btn btn-secondary">
                         <FileText size={18} style={{ marginRight: '5px' }} /> File
+                    </button>
+                    <button onClick={openExportPicker} className="btn btn-secondary">
+                        Export Server ZIP
                     </button>
                 </div>
             </div>
@@ -294,7 +508,7 @@ function FilesPage() {
 
             {/* Editor Overlay */}
             {editorOpen && (
-                <div style={{
+                <div className="modal-overlay" style={{
                     position: 'fixed', inset: 0, zIndex: 1000,
                     background: 'rgba(0,0,0,0.8)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -344,6 +558,78 @@ function FilesPage() {
                                 {saving ? 'Saving...' : 'Save Changes'} <Save size={16} style={{ marginLeft: '5px' }} />
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {exportPicker.open && (
+                <div className="modal-overlay" style={{
+                    position: 'fixed', inset: 0, zIndex: 2050,
+                    background: 'rgba(0,0,0,0.7)',
+                    backdropFilter: 'blur(4px)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    padding: '16px'
+                }}>
+                    <div className="card" style={{ width: '100%', maxWidth: '560px', maxHeight: '80vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                        <h3 style={{ marginTop: 0 }}>Export Server ZIP</h3>
+                        <p style={{ color: 'var(--text-secondary)', marginTop: 0 }}>
+                            Choose files/folders to include. You can open folders (including world) and select nested items.
+                        </p>
+                        <div ref={exportTreeRef} style={{ overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '10px', minHeight: '180px' }}>
+                            {exportPicker.loading ? (
+                                <div style={{ color: 'var(--text-secondary)' }}>Loading export list...</div>
+                            ) : (exportPicker.tree[''] || []).length === 0 ? (
+                                <div style={{ color: 'var(--text-secondary)' }}>No files found in root.</div>
+                            ) : (
+                                renderExportTree('', 0)
+                            )}
+                        </div>
+                        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-secondary)' }}>
+                            Selected: {Object.keys(exportPicker.selected).filter((p) => exportPicker.selected[p]).length}
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '14px' }}>
+                            <button className="btn btn-secondary" onClick={() => setExportPicker({ open: false, loading: false, loadingPath: '', tree: {}, expanded: {}, selected: {} })}>
+                                Close
+                            </button>
+                            <button className="btn btn-primary" style={{ backgroundColor: '#16a34a', borderColor: '#16a34a' }} onClick={handleExportZip}>
+                                Export
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {exportModal.open && (
+                <div className="modal-overlay" style={{
+                    position: 'fixed', inset: 0, zIndex: 2100,
+                    background: 'rgba(0,0,0,0.7)',
+                    backdropFilter: 'blur(4px)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                    <div className="card" style={{ maxWidth: 420, width: '100%', padding: '22px' }}>
+                        {exportModal.state === 'loading' ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, textAlign: 'center', minHeight: '140px' }}>
+                                <img
+                                    src="/static/images/loading-spinner.svg"
+                                    alt="Loading"
+                                    style={{ width: 34, height: 34 }}
+                                />
+                                <div>
+                                    <h3 style={{ margin: 0 }}>Export In Progress</h3>
+                                    <p style={{ margin: '6px 0 0 0', color: 'var(--text-secondary)' }}>{exportModal.message}</p>
+                                </div>
+                            </div>
+                        ) : (
+                            <>
+                                <h3 style={{ marginTop: 0, marginBottom: 8 }}>Export Complete</h3>
+                                <p style={{ marginTop: 0, color: 'var(--text-secondary)' }}>{exportModal.message}</p>
+                                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                    <button className="btn btn-primary" onClick={() => setExportModal({ open: false, state: 'loading', message: '' })}>
+                                        Close
+                                    </button>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
             )}

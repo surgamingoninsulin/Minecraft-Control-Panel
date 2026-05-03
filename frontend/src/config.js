@@ -1,4 +1,4 @@
-﻿export const PANEL_VERSION = '1.3.0';
+﻿export const PANEL_VERSION = '1.3.1';
 export const PANEL_NAME = 'Minecraft Control Panel';
 export const DEVELOPER_NAME = 'SurGamingOnInsulin';
 export const GITHUB_URL = 'https://github.com/surgamingoninsulin';

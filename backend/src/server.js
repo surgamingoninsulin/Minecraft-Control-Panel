@@ -16,6 +16,7 @@ import installerRoutes from './routes/installerRoutes.js';
 import playitRoutes from './routes/playitRoutes.js';
 import worldRoutes from './routes/worldRoutes.js';
 import playerRoutes from './routes/playerRoutes.js';
+import packRoutes from './routes/packRoutes.js';
 import { validateToken } from './middleware/authMiddleware.js';
 import { setupSocketHandlers } from './services/socketService.js';
 
@@ -59,6 +60,7 @@ app.use('/api/settings', validateToken, settingsRoutes);
 app.use('/api/playit', validateToken, playitRoutes);
 app.use('/api/worlds', validateToken, worldRoutes);
 app.use('/api/players', validateToken, playerRoutes);
+app.use('/api/packs', validateToken, packRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

@@ -205,6 +205,8 @@ function normalizeDependencyEntries(entries) {
 function getResourceType(value) {
   const normalized = String(value || '').trim().toLowerCase();
   if (normalized === 'datapack' || normalized === 'datapacks') return 'datapack';
+  if (normalized === 'plugin' || normalized === 'plugins') return 'plugin';
+  if (normalized === 'mod' || normalized === 'mods') return 'mod';
   return '';
 }
 
@@ -455,11 +457,14 @@ class ModrinthProvider extends ModProvider {
     const providerSettings = await this.getProviderSettings();
     const resourceType = getResourceType(options.resourceType);
     const mode = getServerMode(options.serverType);
-    if (resourceType !== 'datapack' && mode === 'vanilla') {
+    const effectiveType = resourceType === 'plugin' || resourceType === 'mod'
+      ? resourceType
+      : (mode === 'plugin' ? 'plugin' : 'mod');
+    if (resourceType !== 'datapack' && mode === 'vanilla' && !resourceType) {
       return buildPaginatedResult([], page, pageSize, 0);
     }
 
-    const facets = [[resourceType === 'datapack' ? 'project_type:datapack' : (mode === 'plugin' ? 'project_type:plugin' : 'project_type:mod')]];
+    const facets = [[resourceType === 'datapack' ? 'project_type:datapack' : (effectiveType === 'plugin' ? 'project_type:plugin' : 'project_type:mod')]];
     if (options.serverType) {
       facets.push([`categories:${String(options.serverType).toLowerCase()}`]);
     }
@@ -1527,6 +1532,12 @@ class ModProviderService {
 
     if (resourceType === 'datapack') {
       return allNames.filter((name) => builtInDatapackNames.includes(name));
+    }
+    if (resourceType === 'plugin') {
+      return allNames.filter((name) => builtInPluginNames.includes(name));
+    }
+    if (resourceType === 'mod') {
+      return allNames.filter((name) => builtInModdedNames.includes(name));
     }
 
     if (mode === 'plugin') {

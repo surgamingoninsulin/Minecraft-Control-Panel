@@ -189,7 +189,6 @@ function WorldsPage() {
 
       await fetchWorldDetail(targetWorldName);
       setActiveTab('browse');
-      dialog.showAlert(`Installed datapack "${item.name}" in ${targetWorldName}.`, 'Success');
     } catch (err) {
       const backendError = err?.response?.data?.error;
       dialog.showAlert(`Failed to install datapack: ${backendError || err.message}`);
@@ -454,8 +453,8 @@ function WorldsPage() {
     <div className="worlds-page fade-in">
       <div className="page-header">
         <div>
-          <h1 className="page-title">World</h1>
-          <p className="page-subtitle">Datapack manager</p>
+          <h1 className="page-title">Datapacks Manager</h1>
+          <p className="page-subtitle">Manage your server datapacks</p>
         </div>
         <div style={{ display: 'flex', gap: '8px', background: 'var(--bg-secondary)', padding: '4px', borderRadius: '8px', border: '1px solid var(--border-color)', width: 'fit-content' }}>
           <button
@@ -569,7 +568,7 @@ function WorldsPage() {
       </div>
     </div>
     {dependencyModal.open && (
-      <div style={{
+      <div className="modal-overlay" style={{
         position: 'fixed',
         inset: 0,
         zIndex: 1100,

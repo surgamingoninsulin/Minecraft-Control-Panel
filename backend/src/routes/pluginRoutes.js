@@ -20,7 +20,8 @@ function isClientCompatibilityError(error) {
 // List all plugins
 router.get('/list', async (req, res) => {
   try {
-    const plugins = await pluginService.listPlugins();
+    const resourceType = String(req.query?.resourceType || 'plugin').trim().toLowerCase();
+    const plugins = await pluginService.listPlugins(resourceType);
     res.json(plugins);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -34,9 +35,11 @@ router.post('/upload', upload.single('plugin'), async (req, res) => {
       return res.status(400).json({ error: 'Plugin file is required' });
     }
 
+    const resourceType = String(req.body?.resourceType || 'plugin').trim().toLowerCase();
     const result = await pluginService.uploadPlugin(
       req.file.originalname,
-      req.file.buffer
+      req.file.buffer,
+      resourceType
     );
     res.json(result);
   } catch (error) {
@@ -48,11 +51,12 @@ router.post('/upload', upload.single('plugin'), async (req, res) => {
 router.delete('/delete', async (req, res) => {
   try {
     const { name } = req.body;
+    const resourceType = String(req.body?.resourceType || 'plugin').trim().toLowerCase();
     if (!name) {
       return res.status(400).json({ error: 'Plugin name is required' });
     }
 
-    const result = await pluginService.deletePlugin(name);
+    const result = await pluginService.deletePlugin(name, resourceType);
     res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });

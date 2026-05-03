@@ -1,13 +1,16 @@
-import { spawn } from 'child_process';
+import { spawn, execFile } from 'child_process';
 import { EventEmitter } from 'events';
 import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import pidusage from 'pidusage';
+import os from 'os';
+import { promisify } from 'util';
 import settingsService from './settingsService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const execFileAsync = promisify(execFile);
 
 function splitCommandLine(input) {
   if (!input || !input.trim()) return [];
@@ -30,7 +33,9 @@ class ServerService extends EventEmitter {
       uptime: 0,
       cpu: 0,
       memory: 0,
-      tps: 20.0,
+      memoryPercent: 0,
+      systemMemoryPercent: 0,
+      tps: null,
       players: { online: 0, max: 20 },
       authFileExists: false
     };
@@ -40,6 +45,10 @@ class ServerService extends EventEmitter {
     this.lifecycleLogPath = path.resolve(__dirname, '../../../logs/server.log');
     this.startTime = null;
     this.statsInterval = null;
+    this.lastGpuProbeAt = 0;
+    this.lastGpuUsage = null;
+    this.lastTpsProbeAt = 0;
+    this.lastTpsUpdateAt = 0;
     this.stopRequested = false;
     this.forceStopTimer = null;
     this.startAttempt = 0;
@@ -65,8 +74,16 @@ class ServerService extends EventEmitter {
     }
   }
 
+  shouldSuppressConsoleLine(line) {
+    const sanitized = String(line || '').replace(/\x1B\[[0-9;]*[mK]/g, '').trim();
+    return /TPS from last 5s,\s*1m,\s*5m,\s*15m:/i.test(sanitized);
+  }
+
   addLog(data) {
     const line = data.toString();
+    if (this.shouldSuppressConsoleLine(line)) {
+      return line.replace(/\x1B\[[0-9;]*[mK]/g, '');
+    }
     this.logs.push(line);
     if (this.logs.length > this.MAX_LOGS) {
       this.logs.shift();
@@ -81,7 +98,10 @@ class ServerService extends EventEmitter {
       await fs.mkdir(path.dirname(this.logFilePath), { recursive: true });
       const raw = await fs.readFile(this.logFilePath, 'utf8');
       const lines = raw.split(/\r?\n/).filter(Boolean);
-      this.logs = lines.slice(-this.MAX_LOGS).map((line) => `${line}\n`);
+      this.logs = lines
+        .filter((line) => !this.shouldSuppressConsoleLine(line))
+        .slice(-this.MAX_LOGS)
+        .map((line) => `${line}\n`);
     } catch (error) {
       if (error.code !== 'ENOENT') {
         console.error('[ServerService] Failed to load persisted logs:', error.message);
@@ -243,6 +263,7 @@ class ServerService extends EventEmitter {
 
       const handleOutput = (streamName, data) => {
         const output = this.addLog(data);
+        this.updateTpsFromOutput(output);
         const clean = output.toLowerCase();
         const lines = output.replace(/\r/g, '').split('\n').map((line) => line.trim()).filter(Boolean);
         if (lines.length > 0) {
@@ -471,6 +492,95 @@ class ServerService extends EventEmitter {
     }
   }
 
+  parseMaxMemoryMbFromStartCommand(startCommand) {
+    const raw = String(startCommand || '');
+    const match = raw.match(/-Xmx(\d+)([kKmMgG])\b/);
+    if (!match) return 0;
+    const value = Number.parseInt(match[1], 10);
+    const unit = String(match[2] || 'm').toLowerCase();
+    if (!Number.isFinite(value) || value <= 0) return 0;
+    if (unit === 'g') return value * 1024;
+    if (unit === 'k') return Math.max(1, Math.round(value / 1024));
+    return value;
+  }
+
+  updateTpsFromOutput(output) {
+    const cleaned = String(output || '').replace(/\x1B\[[0-9;]*[mK]/g, '');
+    const lines = cleaned.split('\n').map((line) => line.trim()).filter(Boolean);
+    let parsedTps = null;
+
+    for (const line of lines) {
+      const lower = line.toLowerCase();
+      if (!lower.includes('tps')) continue;
+
+      const listMatch = line.match(/tps[^:]*:\s*([0-9]+(?:\.[0-9]+)?)(?:\s*,\s*([0-9]+(?:\.[0-9]+)?))?/i);
+      if (listMatch) {
+        const first = Number.parseFloat(listMatch[1]);
+        if (Number.isFinite(first)) {
+          parsedTps = first;
+          break;
+        }
+      }
+
+      const simpleMatch = line.match(/\btps\b[^0-9]*([0-9]+(?:\.[0-9]+)?)/i);
+      if (simpleMatch) {
+        const value = Number.parseFloat(simpleMatch[1]);
+        if (Number.isFinite(value)) {
+          parsedTps = value;
+          break;
+        }
+      }
+    }
+
+    if (Number.isFinite(parsedTps)) {
+      this.stats.tps = Math.max(0, Math.min(20, Number(parsedTps.toFixed(2))));
+      this.lastTpsUpdateAt = Date.now();
+    }
+  }
+
+  async probeGpuUsagePercent() {
+    // Prefer vendor utility when available (NVIDIA).
+    try {
+      const { stdout } = await execFileAsync('nvidia-smi', [
+        '--query-gpu=utilization.gpu',
+        '--format=csv,noheader,nounits'
+      ], { timeout: 1500, windowsHide: true });
+      const values = String(stdout || '')
+        .split(/\r?\n/)
+        .map((line) => Number.parseFloat(String(line).trim()))
+        .filter((n) => Number.isFinite(n));
+      if (values.length > 0) {
+        const avg = values.reduce((sum, v) => sum + v, 0) / values.length;
+        return Math.max(0, Math.min(100, Math.round(avg)));
+      }
+    } catch {
+      // Continue to Windows perf-counter fallback.
+    }
+
+    // Windows fallback for non-NVIDIA drivers.
+    if (process.platform === 'win32') {
+      try {
+        const script = "(Get-Counter '\\GPU Engine(*)\\Utilization Percentage' -ErrorAction SilentlyContinue).CounterSamples | Select-Object -ExpandProperty CookedValue";
+        const { stdout } = await execFileAsync('powershell', ['-NoProfile', '-Command', script], {
+          timeout: 2000,
+          windowsHide: true
+        });
+        const values = String(stdout || '')
+          .split(/\r?\n/)
+          .map((line) => Number.parseFloat(String(line).trim()))
+          .filter((n) => Number.isFinite(n) && n >= 0);
+        if (values.length > 0) {
+          const max = Math.max(...values);
+          return Math.max(0, Math.min(100, Math.round(max)));
+        }
+      } catch {
+        // No GPU counters available.
+      }
+    }
+
+    return null;
+  }
+
   stop() {
     if (this.status !== 'online' && !this.process) {
       this.writeLifecycleLog(`Stop rejected: server not running (status=${this.status}).`);
@@ -591,6 +701,45 @@ class ServerService extends EventEmitter {
         }
 
         const usage = await pidusage(targetPid).catch(() => ({ cpu: 0, memory: 0 }));
+        const processMemoryMb = Math.round(usage.memory / 1024 / 1024);
+        const maxMemoryMb = this.parseMaxMemoryMbFromStartCommand(settings.startCommand);
+        const processMemoryPercent = maxMemoryMb > 0
+          ? Math.max(0, Math.min(100, Math.round((processMemoryMb / maxMemoryMb) * 100)))
+          : 0;
+        const totalMem = os.totalmem();
+        const freeMem = os.freemem();
+        const usedMemPercent = totalMem > 0
+          ? Math.max(0, Math.min(100, Math.round(((totalMem - freeMem) / totalMem) * 100)))
+          : 0;
+
+        const now = Date.now();
+        if ((now - this.lastGpuProbeAt) >= 4000) {
+          this.lastGpuProbeAt = now;
+          this.lastGpuUsage = await this.probeGpuUsagePercent();
+        }
+
+        // Actively probe TPS on plugin server types where "tps" command exists.
+        // Without this, many servers never print TPS lines by default.
+        const serverType = String(settings.serverType || '').trim().toLowerCase();
+        const supportsTpsCommand = ['spigot', 'paper', 'purpur'].includes(serverType);
+        if (
+          supportsTpsCommand &&
+          this.status === 'online' &&
+          this.process &&
+          (now - this.lastTpsProbeAt) >= 10000
+        ) {
+          this.lastTpsProbeAt = now;
+          try {
+            this.process.stdin.write('tps\n');
+          } catch {
+            // Ignore probe write failures.
+          }
+        }
+
+        // If TPS hasn't been refreshed recently, report as unknown instead of stale/incorrect.
+        if (this.lastTpsUpdateAt && (now - this.lastTpsUpdateAt) > 45000) {
+          this.stats.tps = null;
+        }
 
         const uptimeMs = Date.now() - this.startTime;
         const totalSeconds = Math.floor(uptimeMs / 1000);
@@ -606,7 +755,10 @@ class ServerService extends EventEmitter {
           ...this.stats,
           uptime: uptimeStr,
           cpu: Math.round(usage.cpu),
-          memory: Math.round(usage.memory / 1024 / 1024)
+          gpu: this.lastGpuUsage,
+          memory: processMemoryMb,
+          memoryPercent: processMemoryPercent,
+          systemMemoryPercent: usedMemPercent
         };
 
         this.emit('stats', { ...this.stats });

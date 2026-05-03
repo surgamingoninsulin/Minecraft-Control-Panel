@@ -53,7 +53,10 @@ export const serverAPI = {
 
 // File API
 export const fileAPI = {
-  list: (directory = '') => api.get('/files/list', { params: { directory } }),
+  list: (directory = '', options = {}) => api.get('/files/list', {
+    params: { directory },
+    timeout: options.timeout ?? undefined
+  }),
   read: (path) => api.get('/files/read', { params: { path } }),
   write: (path, content) => api.post('/files/write', { path, content }),
   delete: (path) => api.delete('/files/delete', { data: { path } }),
@@ -65,20 +68,32 @@ export const fileAPI = {
     return api.post('/files/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
-  }
+  },
+  exportZip: (includePaths = []) => api.post('/packs/export-zip', { includePaths }, { responseType: 'blob', timeout: 0 })
+};
+
+export const packAPI = {
+  getProviders: () => api.get('/packs/providers'),
+  addProvider: (name, url) => api.post('/packs/providers', { name, url }),
+  removeProvider: (url) => api.delete('/packs/providers', { data: { url } }),
+  getPacks: () => api.get('/packs'),
+  install: (pack) => api.post('/packs/install', { pack }, { timeout: 0 })
 };
 
 // Plugin API
 export const pluginAPI = {
-  list: () => api.get('/plugins/list'),
-  upload: (file) => {
+  list: (resourceType = 'plugin') => api.get('/plugins/list', {
+    params: { resourceType }
+  }),
+  upload: (file, resourceType = 'plugin') => {
     const formData = new FormData();
     formData.append('plugin', file);
+    formData.append('resourceType', resourceType);
     return api.post('/plugins/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
   },
-  delete: (name) => api.delete('/plugins/delete', { data: { name } }),
+  delete: (name, resourceType = 'plugin') => api.delete('/plugins/delete', { data: { name, resourceType } }),
   providers: (options = {}) => api.get('/plugins/providers', {
     params: {
       serverType: options.serverType,

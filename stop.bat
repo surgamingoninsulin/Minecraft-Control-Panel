@@ -8,8 +8,8 @@ echo Stopping Minecraft panel processes (backend/frontend/caddy/start.vbs)...
 powershell -NoProfile -ExecutionPolicy Bypass -File ".\deploy\scripts\stop-panel.ps1"
 if errorlevel 1 (
   echo Stop completed with warnings.
+  pause
 ) else (
   echo Done.
 )
-pause
 endlocal

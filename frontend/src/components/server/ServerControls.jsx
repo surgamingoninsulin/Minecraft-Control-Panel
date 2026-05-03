@@ -4,7 +4,7 @@ import { Play, Square, RotateCw, Loader } from 'lucide-react';
 import { serverAPI } from '../../services/api';
 import './ServerControls.css';
 
-function ServerControls({ status }) {
+function ServerControls({ status, embedded = false, title = 'Server Controls' }) {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
@@ -48,38 +48,43 @@ function ServerControls({ status }) {
   const isOffline = status === 'offline';
   const isStopping = status === 'stopping';
 
+  const controls = (
+    <div className="controls-grid">
+      <button
+        className="btn btn-primary"
+        onClick={handleStart}
+        disabled={loading || isOnline || isStarting || isStopping}
+      >
+        {loading ? <Loader className="spin" size={18} /> : <Play size={18} />}
+        Start Server
+      </button>
+
+      <button
+        className="btn btn-danger"
+        onClick={handleStop}
+        disabled={loading || isOffline || isStopping}
+      >
+        {loading ? <Loader className="spin" size={18} /> : <Square size={18} />}
+        Stop Server
+      </button>
+
+      <button
+        className="btn btn-secondary"
+        onClick={handleRestart}
+        disabled={loading || !isOnline}
+      >
+        {loading ? <Loader className="spin" size={18} /> : <RotateCw size={18} />}
+        Restart Server
+      </button>
+    </div>
+  );
+
+  if (embedded) return controls;
+
   return (
     <div className="card">
-      <h3 className="card-title">Server Controls</h3>
-
-      <div className="controls-grid">
-        <button
-          className="btn btn-primary"
-          onClick={handleStart}
-          disabled={loading || isOnline || isStarting || isStopping}
-        >
-          {loading ? <Loader className="spin" size={18} /> : <Play size={18} />}
-          Start Server
-        </button>
-
-        <button
-          className="btn btn-danger"
-          onClick={handleStop}
-          disabled={loading || isOffline || isStopping}
-        >
-          {loading ? <Loader className="spin" size={18} /> : <Square size={18} />}
-          Stop Server
-        </button>
-
-        <button
-          className="btn btn-secondary"
-          onClick={handleRestart}
-          disabled={loading || !isOnline}
-        >
-          {loading ? <Loader className="spin" size={18} /> : <RotateCw size={18} />}
-          Restart Server
-        </button>
-      </div>
+      <h3 className="card-title">{title}</h3>
+      {controls}
     </div>
   );
 }

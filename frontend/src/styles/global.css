@@ -405,6 +405,28 @@ small {
   justify-content: center;
   z-index: 9999;
   animation: modalOverlayFade 0.3s ease-out;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+body:has(.modal-overlay),
+body:has(.dialog-overlay) {
+  overflow: hidden;
+}
+
+html.modal-open,
+body.modal-open {
+  overflow: hidden !important;
+  overscroll-behavior: none;
+}
+
+body.modal-open .layout-root,
+body.modal-open .layout-body,
+body.modal-open .main-content,
+body.modal-open .page-content,
+body.modal-open .login-page,
+body.modal-open .login-card {
+  overflow: hidden !important;
 }
 
 @keyframes modalOverlayFade {

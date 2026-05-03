@@ -9,6 +9,37 @@ const DATA_DIR = path.join(__dirname, '../../data');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const SERVER_ICON_SOURCE = path.resolve(__dirname, '../../../frontend/public/static/images/server-icon.png');
 const DEFAULT_GITHUB_GIST_URL = 'https://gist.github.com/surgamingoninsulin/2b4d90991a5a5a025f69cce2282f67b7';
+const RESTART_BAT_CONTENT = `@echo off
+setlocal EnableExtensions
+
+REM Always run from this script's folder
+cd /d "%~dp0"
+
+REM Find the newest Purpur jar in this folder
+set "SERVER_JAR="
+for /f "delims=" %%F in ('dir /b /a:-d /o:-d "purpur-*.jar" 2^>nul') do (
+  set "SERVER_JAR=%%F"
+  goto :found
+)
+
+:found
+if not defined SERVER_JAR (
+  echo [restart.bat] ERROR: Could not find purpur-*.jar in %cd%
+  timeout /t 10 /nobreak >nul
+  exit /b 1
+)
+
+echo [restart.bat] Starting %SERVER_JAR%
+
+REM Adjust RAM values if needed
+java -Xms2G -Xmx6G -jar "%SERVER_JAR%" nogui
+
+REM If Java exits immediately, wait a moment to avoid tight crash loops
+set "EXIT_CODE=%errorlevel%"
+echo [restart.bat] Java exited with code %EXIT_CODE%
+timeout /t 5 /nobreak >nul
+exit /b %EXIT_CODE%
+`;
 
 function safeString(value, fallback = '') {
   if (value === undefined || value === null) return fallback;
@@ -530,6 +561,7 @@ class SettingsService {
     this.settings = settingsToSave;
     await fs.writeFile(SETTINGS_FILE, JSON.stringify(this.settings, null, 2));
     await this.ensureServerIconInRoot(this.settings.serverPath);
+    await this.ensureRestartScriptInRoot(this.settings.serverPath);
 
     return this.settings;
   }
@@ -543,6 +575,18 @@ class SettingsService {
       await fs.copyFile(SERVER_ICON_SOURCE, targetIconPath);
     } catch {
       // Never block settings persistence if icon copy fails.
+    }
+  }
+
+  async ensureRestartScriptInRoot(serverPath) {
+    const targetRoot = safeString(serverPath, '').trim();
+    if (!targetRoot) return;
+    const restartScriptPath = path.join(targetRoot, 'restart.bat');
+    try {
+      await fs.mkdir(targetRoot, { recursive: true });
+      await fs.writeFile(restartScriptPath, RESTART_BAT_CONTENT, 'utf8');
+    } catch {
+      // Never block settings persistence if restart script write fails.
     }
   }
 
